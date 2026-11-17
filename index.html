@@ -1038,6 +1038,7 @@ function staffCook(ci = 0) {
   const opts = []; let budgetOut = false;
   for (const ri in S.known.r) {
     if (S.menu[ri] === false) continue;
+    { const cp = S.capR && S.capR[ri]; if (cp && (S.dish['r' + ri] || 0) + (S.dishG['r' + ri] || 0) + S.shelf.filter(x => x.key === 'r' + ri).reduce((a, x) => a + x.n, 0) >= cp) continue; }
     const r = REC[ri], c = canCook(r, S.auto.buy);
     if (c < 0 || (c > 0 && !canSpend(c))) { if (c > 0) budgetOut = true; continue; }
     const stock = S.dish['r' + ri] || 0, rv = reserveMap()['r' + ri] || 0;
@@ -2100,7 +2101,7 @@ function renderShelf() { syncShelf();
   const cw = WARES.find(w => w.id === S.shelfWare[shelfSel]);
   if (cw || Object.values(S.wares).some(n => n > 0)) html += `<div class="row"><div class="t"><b>この棚の器：${cw ? cw.name + '（+' + cw.bonus * 100 + '%）' : 'なし'}</b><span>器を置くと、客が高めの値段でも買ってくれる</span></div>${WARES.filter(w => (S.wares[w.id] || 0) > 0 && w !== cw).map(w => `<div class="btn" data-ware="${w.id}">${w.name}</div>`).join('')}${cw ? '<div class="btn" data-ware="">外す</div>' : ''}</div>`;
   const items = allDishes();
-  html += `<div class="h">手持ちの料理（倉庫・カバン・持ち物）</div><div class="grid">${items.map(it => `<div class="cell ${it.g ? 'gold' : ''}" data-k="${it.k}" data-g="${it.g ? 1 : 0}">${dishIcHTML(it.k, U * 13, it.g)}<span class="n">${it.n}</span></div>`).join('') || '<div class="p">料理がない。かまどで作ろう。</div>'}</div>`;
+  html += `<div class="h">手持ちの料理（倉庫・カバン・持ち物）</div><div class="itool"><input id="shq" placeholder="🔍 料理名で探す" value="${(cook.q2 || '').replace(/"/g, '')}"></div><div class="grid">${items.map(it => `<div class="cell ${it.g ? 'gold' : ''}" data-nm="${dishInfo(it.k).name}" data-k="${it.k}" data-g="${it.g ? 1 : 0}">${dishIcHTML(it.k, U * 13, it.g)}<span class="n">${it.n}</span></div>`).join('') || '<div class="p">料理がない。かまどで作ろう。</div>'}</div>`;
   modal('陳列棚と値付け', html, 'shelf', () => { if (S.shelf.some(x => x.draft)) { S.shelf.forEach(x => x.draft = false); toast('値段を決めて、販売を始めた。'); } });
   bind('[data-s]', d => { shelfSel = +d.s; renderShelf(); });
   bind('[data-p]', d => { const v = d.p; s.price = Math.max(1, v.endsWith('%') ? Math.round(s.price * (1 + parseInt(v) / 100)) : s.price + parseInt(v)); s.draft = true; s.man = true; dirty = true; renderShelf(); });
@@ -2108,6 +2109,7 @@ function renderShelf() { syncShelf();
   bind('[data-a=sell]', () => { S.shelf.forEach(x => { if (x.draft) x.draft = false; }); sfx('coin'); toast('値段を決めて、販売を始めた。'); renderShelf(); });
   bind('[data-ware]', d => { const old = S.shelfWare[shelfSel]; if (old) S.wares[old] = (S.wares[old] || 0) + 1; if (d.ware) { S.wares[d.ware]--; S.shelfWare[shelfSel] = d.ware; } else delete S.shelfWare[shelfSel]; dirty = true; renderShelf(); });
   bind('[data-a=take]', () => { add(s.g ? S.dishG : S.dish, s.key, s.n); s.n = 0; s.key = null; s.man = false; renderShelf(); });
+  { const e = document.querySelector('#shq'); if (e) { const f = () => { cook.q2 = e.value; const q = e.value.trim(); document.querySelectorAll('.cell[data-nm]').forEach(x => x.style.display = !q || x.dataset.nm.includes(q) ? '' : 'none'); }; e.oninput = f; f(); } }
   bind('[data-a=resv]', () => openOrders());
   bind('.cell', d => {
     const g = d.g === '1';
@@ -2327,11 +2329,14 @@ function openMachine(slot) {
     const lock = r.lv > st.lv, cnt = {}; r.ins.forEach(x => cnt[x] = (cnt[x] || 0) + 1);
     const hv = x => haveIng(x) + haveIng(x, true), miss = Object.keys(cnt).filter(x => hv(x) < cnt[x]), full = st.q.length >= cap;
     const ok = !lock && !miss.length && !full, buyC = miss.every(x => ING[INGI[x]].src[0] === 'market') ? miss.reduce((a, x) => a + ING[INGI[x]].src[1] * (cnt[x] - hv(x)), 0) : -1;
-    html += `<div class="row">${ingIc(r.out, U * 11, false, true)}<div class="t"><b>${ingName(r.out)}×${r.n}${lock ? `　🔒Lv${r.lv}` : ''}</b>${procSave(r)}<span>${Object.keys(cnt).map(x => `<span class="chipin ${hv(x) >= cnt[x] ? 'ok' : 'ng'}">${ingName(x)}${cnt[x] > 1 ? '×' + cnt[x] : ''}（${hv(x)}）</span>`).join('')}　${r.sec}秒${lock ? '' : full ? '<br><span style="color:#d8806a">予約がいっぱい</span>' : miss.length ? `<br><span style="color:#d8806a">足りない：${miss.map(x => ingName(x) + '×' + (cnt[x] - hv(x)) + ({seed:'（畑で育てる・種は市場）', market:'（市場）', pier:'（釣り）', forage:'（採集）', tree:'（果樹）', proc:'（加工）'}[ING[INGI[x]].src[0]] || '')).join('・')}</span>` : ''}</span></div>${!lock && !full && miss.length && buyC >= 0 ? `<div class="btn ${S.gold >= buyC ? 'grn' : 'dis'}" data-rb="${ri}" style="font-size:.85em">買って仕込む<br>${fmt(buyC)}G</div>` : `<div class="btn ${ok ? '' : 'dis'}" data-r="${ri}">仕込む</div>`}</div>`;
+    html += `<div class="row">${ingIc(r.out, U * 11, false, true)}<div class="t"><b>${ingName(r.out)}×${r.n}${lock ? `　🔒Lv${r.lv}` : ''}</b>${procSave(r)}<span>${Object.keys(cnt).map(x => `<span class="chipin ${hv(x) >= cnt[x] ? 'ok' : 'ng'}">${ingName(x)}${cnt[x] > 1 ? '×' + cnt[x] : ''}（${hv(x)}）</span>`).join('')}　${r.sec}秒${lock ? '' : full ? '<br><span style="color:#d8806a">予約がいっぱい</span>' : miss.length ? `<br><span style="color:#d8806a">足りない：${miss.map(x => ingName(x) + '×' + (cnt[x] - hv(x)) + ({seed:'（畑で育てる・種は市場）', market:'（市場）', pier:'（釣り）', forage:'（採集）', tree:'（果樹）', proc:'（加工）'}[ING[INGI[x]].src[0]] || '')).join('・')}</span>` : ''}</span></div>${!lock && !full && miss.length && buyC >= 0 ? `<div class="btn ${S.gold >= buyC ? 'grn' : 'dis'}" data-rb="${ri}" style="font-size:.85em">買って仕込む<br>${fmt(buyC)}G</div>` : `<div class="btn ${ok ? '' : 'dis'}" data-r="${ri}">仕込む</div>${ok && st.q.length < cap - 1 ? `<div class="btn" data-rall="${ri}" style="font-size:.8em">あるだけ</div>` : ''}`}</div>`;
   });
   html += st.lv < 3 ? `<div class="row"><div class="t"><b>${m.name}を強化 Lv${st.lv}→${st.lv + 1}</b><span>加工が速くなり、予約枠と加工法が増える</span></div><div class="btn ${S.gold >= upC ? '' : 'dis'}" data-a="up">${fmt(upC)}G</div></div>` : '';
   modal(`${m.name} Lv${st.lv}`, html, 'mach');
   const takeAny = x => takeIng(x, false, 1) || takeIng(x, true, 1);
+  bind('[data-rall]', d => { const r = m.recipes[+d.rall], c = {}; r.ins.forEach(x => c[x] = (c[x] || 0) + 1); let k = 0;
+    while (st.q.length < cap && Object.keys(c).every(x => haveIng(x) + haveIng(x, true) >= c[x])) { r.ins.forEach(takeAny); st.q.push({r:+d.rall, t:0}); k++; }
+    if (k) { sfx('tick'); dirty = true; toast(`${ingName(r.out)}を${k}回ぶん仕込んだ`); } openMachine(slot); });
   bind('[data-r]', d => { const r = m.recipes[+d.r]; if (st.q.length >= cap) return; const c = {}; r.ins.forEach(x => c[x] = (c[x] || 0) + 1); for (const x in c) if (haveIng(x) + haveIng(x, true) < c[x]) return; r.ins.forEach(takeAny); st.q.push({r:+d.r, t:0}); sfx('tick'); dirty = true; openMachine(slot); });
   bind('[data-rb]', d => { const r = m.recipes[+d.rb]; if (st.q.length >= cap) return; const c = {}; r.ins.forEach(x => c[x] = (c[x] || 0) + 1); let cost = 0; for (const x in c) { const l = c[x] - haveIng(x) - haveIng(x, true); if (l > 0) { if (ING[INGI[x]].src[0] !== 'market') return; cost += ING[INGI[x]].src[1] * l; } } if (S.gold < cost) return toast('お金が足りない');
     for (const x in c) { const l = c[x] - haveIng(x) - haveIng(x, true); if (l > 0) buyMarket(x, l); } r.ins.forEach(takeAny); st.q.push({r:+d.rb, t:0}); sfx('coin'); dirty = true; toast(`足りない材料を市場で買って仕込んだ（${fmt(cost)}G）`); openMachine(slot); });
@@ -2418,12 +2423,13 @@ function openRecipes() {
     return `<div class="row">${icHTML(r.icon, U * 11, 'sil')}<div class="t"><b>？？？（${r.method}・${r.ings.length}品）</b><span>使ったことのある食材：${r.ings.filter(isKnown).map(ingName).join('・') || 'なし'}</span></div></div>`; }).join('');
   html += `<div class="h">作ったレシピ（スイッチ＝料理人に作らせる）</div>`;
   html += known.map(ri => { const r = REC[ri]; const on = S.menu[ri] !== false;
-    return `<div class="row">${icHTML(r.icon, U * 11, 'atlas', null, 'r:' + ri)}<div class="t"><b>${r.name}${monTag('r' + ri)} ${mastStars('r' + ri)}</b><span>${r.method}：${r.ings.map(ingLabel).join('・')}　${fmt(dval('r' + ri))}G</span></div>${wishStar(ri)}<div class="sw ${on ? 'on' : ''}" data-ri="${ri}"><i></i></div></div>`; }).join('') || '<div class="p">まだない。かまどの「レシピ帳」から作ってみよう。</div>';
+    return `<div class="row">${icHTML(r.icon, U * 11, 'atlas', null, 'r:' + ri)}<div class="t"><b>${r.name}${monTag('r' + ri)} ${mastStars('r' + ri)}</b><span>${r.method}：${r.ings.map(ingLabel).join('・')}　${fmt(dval('r' + ri))}G</span></div>${wishStar(ri)}${S.staff.cook ? `<div class="btn" data-cap="${ri}" style="font-size:.8em;min-width:${U * 9}px">上限<br>${(S.capR || {})[ri] || '∞'}</div>` : ''}<div class="sw ${on ? 'on' : ''}" data-ri="${ri}"><i></i></div></div>`; }).join('') || '<div class="p">まだない。かまどの「レシピ帳」から作ってみよう。</div>';
   if (cre.length) html += `<div class="h">創作料理</div>` + cre.map(k => { const c = S.creative[k]; return `<div class="row">${dishIcHTML(k, U * 11)}<div class="t"><b>${c.name}</b><span>${c.method}：${c.ings.map(ingLabel).join('・')}　${fmt(c.value)}G</span></div></div>`; }).join('');
   modal('レシピ', html, 'rec');
   bind('[data-a=airec]', () => openAiRecs());
   bind('[data-ri]', d => { S.menu[d.ri] = S.menu[d.ri] === false; dirty = true; openRecipes(); });
   bind('[data-wl]', d => { wishToggle(+d.wl); openRecipes(); });
+  bind('[data-cap]', d => { S.capR = S.capR || {}; const seq = [0, 3, 5, 10, 20, 40], c = S.capR[d.cap] || 0, nx = seq[(seq.indexOf(c) + 1) % seq.length]; if (nx) S.capR[d.cap] = nx; else delete S.capR[d.cap]; tut('m_cap'); dirty = true; openRecipes(); });
   bind('[data-wx]', d => { delete wishL()[d.wx]; dirty = true; openRecipes(); });
   bind('[data-wn]', d => { const [ri, v] = d.wn.split(':').map(Number), w = wishL(); w[ri] = Math.max(1, Math.min(99, (w[ri] || 1) + v)); dirty = true; openRecipes(); });
   bind('[data-a=hint]', () => {
@@ -3105,6 +3111,7 @@ const TUT = {
   m_staff:['従業員', '雇うと留守中も仕事をしてくれる（最大8時間分）。<br>料理人は覚えたレシピを作り、店員は自動で棚に並べて売る。'],
   m_orders:['依頼の掲示板', '住民の注文。<b>①書いてある料理を作る</b>（まだ作ったことがない料理は、名前・調理法・材料の数・材料1つがヒント。残りの材料はかまどで試して探す）<br><b>②棚に並べずに「届ける」</b>。作った直後の「できあがり」画面からも届けられる。棚に並べるとお客さんが買ってしまうので注意。<br>作れそうにない依頼は、1日1回「入れ替え」できる。<br>宴会の予約・評論家の記事・料理コンテストもここで見られる。'],
   m_forgehut:['鍛冶小屋', '古井戸の下に、ガルドの鍛冶小屋ができた。<br>小屋をタップすると、いつでも鍛冶（ツルハシ・武器・防具・付与・器）ができる。<br>「施設」タブの「⚒ 鍛冶屋ガルド」からも開ける。'],
+  m_cap:['料理人の作る上限', 'レシピ帳の「上限」を押すたびに ∞→3→5→10→20→40 と変わる。<br>倉庫・棚にその料理が上限の数あると、料理人はもう作らない（材料の使いすぎを防ぐ）。'],
   m_fishmk:['朝の魚市', '市場に「🐟魚市」の札ができた。毎朝6時〜10時だけ開き、日替わりで魚・貝・エビなどが5品並ぶ（ときどき珍しい魚も）。<br>値段は値打ちの1.5倍。狙った魚が釣れない時に。'],
   m_fishcond:['釣れる条件', '魚の図鑑に、釣れる場所・珍しさ・合うエサ（×は掛かりやすさ）・旬が出る。<br>珍しい魚は、霧の日・夜・良い竿・生簀の強化で出やすくなる。'],
   m_plv:['主人公のレベル', '迷宮やダンジョンで魔物を倒す・岩を砕くと経験がたまり、主人公のレベルが上がる。<br>Lvが1上がるごとに、最大体力+5・最大気力+4（最大Lv50）。迷宮の上の帯に今のLvが出る。'],
@@ -4233,8 +4240,17 @@ function sleepUntilMorning(forced) {
     const parts = [];
     if (r.branch) parts.push(`支店の売上 ${fmt(r.branch)}G が届いた`); if (r.night) parts.push(`裏営業：深夜の客 ${r.night.buy}人に ${fmt(r.night.earned)}G 売った`); if (r.town) parts.push(`町から届いた：${r.town}`); if (r.spent) parts.push(`材料と種の仕入れに ${fmt(r.spent)}G 使った`); if (r.cooked) parts.push(`料理人が仕込みで ${r.cooked}皿 作った`); if (r.proc) parts.push(`加工器具で ${r.proc}個 できた`);
     if (r.bar) parts.push(`酒場の売上 ${fmt(r.bar)}G`); if (r.inn) parts.push(`宿屋の売上 ${fmt(r.inn)}G`); if (r.harvested) parts.push(`農夫が ${r.harvested}個 収穫した`);
-    popStory(`<div class="tth">${forced ? '😵 眠気に負けて倒れてしまった……' : '🌅 おはよう！'}</div><div class="ttx">${monthName()} ${dayInMonth()}日の朝。天気：${wx().i}${wx().n}${wx().d ? '（' + wx().d + '）' : ''}<br>${parts.join('<br>') || '静かな夜だった。'}${forced ? '<br><span style="color:#e07a6a">夜ふかしは禁物。2時を過ぎると倒れてしまう。</span>' : ''}</div><div class="trw">棚に料理を並べたら「🔔開店する」。開けないと10時に自動で開店する。</div>`, () => tut('sleep'));
+    popStory(`<div class="tth">${forced ? '😵 眠気に負けて倒れてしまった……' : '🌅 おはよう！'}</div><div class="ttx">${monthName()} ${dayInMonth()}日の朝。天気：${wx().i}${wx().n}${wx().d ? '（' + wx().d + '）' : ''}<br>${parts.join('<br>') || '静かな夜だった。'}${forced ? '<br><span style="color:#e07a6a">夜ふかしは禁物。2時を過ぎると倒れてしまう。</span>' : ''}${morningTodo()}</div><div class="trw">棚に料理を並べたら「🔔開店する」。開けないと10時に自動で開店する。</div>`, () => tut('sleep'));
   }, 400);
+}
+// v0.55：朝の報告の「今日のやること」（やることの一覧から上位＋魚市の目玉＋今日の予定）
+function morningTodo() {
+  let L = []; try { L = todoList(); } catch (e) {}
+  const extra = [];
+  if (unl('fishing')) { const st = fmStock(), top = st.it.slice().sort((a, b) => (b.rare || 0) - (a.rare || 0) || ING[INGI[b.id]].value - ING[INGI[a.id]].value)[0]; if (top) extra.push(`🐟 今日の魚市（6〜10時）の目玉：${ingName(top.id)}${top.rare ? '（珍しい！）' : ''}　ほか${st.it.length - 1}品`); }
+  try { const ev = curEvent && curEvent(); if (ev) extra.push(`🎉 行事：${ev.n}`); } catch (e) {}
+  const items = L.slice(0, 6).map(x => `${x.i} ${x.t}`).concat(extra);
+  return items.length ? `<div style="margin-top:.6em;padding-top:.5em;border-top:1px solid rgba(255,255,255,.12)"><b>📋 今日のやること</b>${L.length > 6 ? `（ほか${L.length - 6}件は画面上の📋）` : ''}<br>${items.join('<br>')}</div>` : '';
 }
 // manual idle (放置)
 function openIdle() {
@@ -4954,7 +4970,7 @@ const MAN = [
     '種は外の市場（広場の左）の「種」で買う。農夫を雇うと、実った作物を収穫して同じ種を植え直してくれる。',
     '畑の区画・スプリンクラー（自動で水やり）・温室（珍しい種）・たい肥箱（肥料）は「施設」タブから。'])
     + tbl(['種', '値段', '育つ時間'], SEEDS.filter(g => !FANTASY.has(g.id) && !HYBS.has(g.id)).slice(0, 40).map(g => [g.name, g.src[1] + 'G', secT(g.src[2])]))},
-  {k:'cook', t:'料理とレシピ', c:() => true, h:() => li(['かまどの「🔍」で、食材（自由に作る）や料理名・食材名（レシピ帳）を探せる。', 'レシピ帳で材料が足りなくても、足りない物が全部市場の物なら「買って作る ○G」で一度に作れる。', 
+  {k:'cook', t:'料理とレシピ', c:() => true, h:() => li(['料理人がいると、レシピ帳の各レシピに「上限」が出る。押すたびに ∞→3→5→10→20→40。倉庫と棚にその数あると、料理人はその料理を作らない。', '陳列棚の「手持ちの料理」も🔍で探せる。', '加工器具の「あるだけ」で、材料と予約の空きがある限りまとめて仕込む。', '朝の報告に「今日のやること」（📋の上位・魚市の目玉・行事）が出る。', 'かまどの「🔍」で、食材（自由に作る）や料理名・食材名（レシピ帳）を探せる。', 'レシピ帳で材料が足りなくても、足りない物が全部市場の物なら「買って作る ○G」で一度に作れる。', 
     'かまど（店内の厨房）で、食材を1〜4つと調理法（焼く・煮る・揚げる・蒸す・炊く・生）を選ぶ。合っていればレシピ発見。',
     '外れても「惜しい！」なら、食材が多い・足りない・1つ違う、と合っている食材を1つ教えてくれる。',
     'レシピタブで「ヒント」を買うと、未発見のレシピの食材がわかる（続けて買うと同じレシピの食材がもう1つ。100G→160G→220G…）。',
