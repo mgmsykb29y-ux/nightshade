@@ -1062,13 +1062,13 @@ function restock() {
   const spare = (src, k, g) => Math.max(0, (src[k] || 0) - (g ? 0 : keepOf(k)));
   for (let i = 0; i < shelfCount(); i++) {
     const s = S.shelf[i];
-    if (s.n > 0 && s.n < 5) { const src = s.g ? S.dishG : S.dish; const m = Math.min(5 - s.n, spare(src, s.key, s.g)); if (m) { add(src, s.key, -m); s.n += m; } s.price = Math.round(dval(s.key, s.g) * modeMult()); continue; }
-    if (s.n > 0) { s.price = Math.round(dval(s.key, s.g) * modeMult()); continue; }
+    if (s.n > 0 && s.n < 5) { const src = s.g ? S.dishG : S.dish; const m = Math.min(5 - s.n, spare(src, s.key, s.g)); if (m) { add(src, s.key, -m); s.n += m; } if (!s.man) s.price = Math.round(dval(s.key, s.g) * modeMult()); continue; }
+    if (s.n > 0) { if (!s.man) s.price = Math.round(dval(s.key, s.g) * modeMult()); continue; }
     let best = null;
     for (const [src, g] of [[S.dishG, true], [S.dish, false]]) for (const k in src) { if (used.has(k + (g ? '*' : '')) || spare(src, k, g) <= 0) continue; const v = dval(k, g); if (!best || v > best.v) best = {k, g, v}; }
     if (!best) continue;
     const src = best.g ? S.dishG : S.dish, m = Math.min(5, spare(src, best.k, best.g));
-    add(src, best.k, -m); Object.assign(s, {key:best.k, g:best.g, n:m, price:Math.round(best.v * modeMult())}); used.add(best.k + (best.g ? '*' : ''));
+    add(src, best.k, -m); Object.assign(s, {key:best.k, g:best.g, n:m, man:false, price:Math.round(best.v * modeMult())}); used.add(best.k + (best.g ? '*' : ''));
   }
 }
 function fishRoll(loc, bonus = 0, rod = null) {
@@ -2055,7 +2055,7 @@ function renderShelf() { syncShelf();
     html += `<div style="text-align:center;font-size:${U * 5.46}px;font-weight:800">${s.g ? '金色の' : ''}${d.name}　残り${s.n}</div>
       <div class="price"><div class="btn" data-p="-10%">−10%</div><div class="btn" data-p="-1">−1</div><div class="v">${fmt(s.price)}G</div><div class="btn" data-p="+1">+1</div><div class="btn" data-p="+10%">+10%</div></div>
       ${nbHTML(s.key, s.g)}
-      ${s.draft ? `<div class="btn big grn" data-a="sell" style="margin-top:${U * 1.4}px">この値段で販売する</div><div class="p" style="text-align:center;color:#e0be6e">値段を決めるまで、この棚の料理は売れない（閉じても販売開始）</div>` : `<div class="p" style="text-align:center;color:#8ad08a">販売中</div>`}
+      ${s.draft ? `<div class="btn big grn" data-a="sell" style="margin-top:${U * 1.4}px">この値段で販売する</div><div class="p" style="text-align:center;color:#e0be6e">値段を決めるまで、この棚の料理は売れない（閉じても販売開始）</div>` : `<div class="p" style="text-align:center;color:#8ad08a">販売中${s.man && S.auto.sell && S.staff.clerk ? '（あなたが決めた値段。店員は変えない）' : ''}</div>`}${s.man && S.auto.sell && S.staff.clerk ? `<div class="btn" data-a="auto" style="margin:${U}px auto 0;display:table">値段を店員にまかせる</div>` : ''}
       <div class="btn" data-a="take" style="margin:${U * 1.4}px auto;display:table">棚から下げる</div>`;
   } else html += `<div class="p" style="text-align:center">この棚は空。下の料理から選んで並べよう（最大5個）。</div>`;
   if (!S.wares) S.wares = {}; if (!S.shelfWare) S.shelfWare = {};
@@ -2065,14 +2065,15 @@ function renderShelf() { syncShelf();
   html += `<div class="h">手持ちの料理（倉庫・カバン・持ち物）</div><div class="grid">${items.map(it => `<div class="cell ${it.g ? 'gold' : ''}" data-k="${it.k}" data-g="${it.g ? 1 : 0}">${dishIcHTML(it.k, U * 13, it.g)}<span class="n">${it.n}</span></div>`).join('') || '<div class="p">料理がない。かまどで作ろう。</div>'}</div>`;
   modal('陳列棚と値付け', html, 'shelf', () => { if (S.shelf.some(x => x.draft)) { S.shelf.forEach(x => x.draft = false); toast('値段を決めて、販売を始めた。'); } });
   bind('[data-s]', d => { shelfSel = +d.s; renderShelf(); });
-  bind('[data-p]', d => { const v = d.p; s.price = Math.max(1, v.endsWith('%') ? Math.round(s.price * (1 + parseInt(v) / 100)) : s.price + parseInt(v)); s.draft = true; dirty = true; renderShelf(); });
+  bind('[data-p]', d => { const v = d.p; s.price = Math.max(1, v.endsWith('%') ? Math.round(s.price * (1 + parseInt(v) / 100)) : s.price + parseInt(v)); s.draft = true; s.man = true; dirty = true; renderShelf(); });
+  bind('[data-a=auto]', () => { s.man = false; s.draft = false; s.price = Math.round(dval(s.key, s.g) * modeMult()); toast('この棚の値段を店員にまかせた。'); dirty = true; renderShelf(); });
   bind('[data-a=sell]', () => { S.shelf.forEach(x => { if (x.draft) x.draft = false; }); sfx('coin'); toast('値段を決めて、販売を始めた。'); renderShelf(); });
   bind('[data-ware]', d => { const old = S.shelfWare[shelfSel]; if (old) S.wares[old] = (S.wares[old] || 0) + 1; if (d.ware) { S.wares[d.ware]--; S.shelfWare[shelfSel] = d.ware; } else delete S.shelfWare[shelfSel]; dirty = true; renderShelf(); });
-  bind('[data-a=take]', () => { add(s.g ? S.dishG : S.dish, s.key, s.n); s.n = 0; s.key = null; renderShelf(); });
+  bind('[data-a=take]', () => { add(s.g ? S.dishG : S.dish, s.key, s.n); s.n = 0; s.key = null; s.man = false; renderShelf(); });
   bind('[data-a=resv]', () => openOrders());
   bind('.cell', d => {
     const g = d.g === '1';
-    if (s.n && (s.key !== d.k || s.g !== g)) { add(s.g ? S.dishG : S.dish, s.key, s.n); s.n = 0; }
+    if (s.n && (s.key !== d.k || s.g !== g)) { add(s.g ? S.dishG : S.dish, s.key, s.n); s.n = 0; s.man = false; }
     const m = Math.min(5 - s.n, haveDish(d.k, g)); if (!m) return;
     takeDish(d.k, g, m); sfx('tick'); s.draft = true;
     if (!s.n) { const nb = S.nb[d.k + (g ? '*' : '')]; s.price = nb && nb.fair ? nb.fair : Math.round(dval(d.k, g) * (0.9 + Math.random() * .5)); }
