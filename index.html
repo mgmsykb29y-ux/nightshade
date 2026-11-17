@@ -460,7 +460,7 @@ const GOALS = [
   {t:'かまどで料理を作ろう', h:'店内のかまどをタップ。食材と調理法を選ぶ', chk:s => s.stat.cooked > 0, r:80},
   {t:'料理を陳列棚に並べよう', h:'カウンターの棚かレジをタップして、値段を決める', chk:s => s.shelf.some(x => x.n > 0) || s.stat.sold > 0, r:80},
   {t:'料理を3つ売ろう', h:'客の表情で値段が高いか安いかわかる', chk:s => s.stat.sold >= 3, r:120, un:['orders']},
-  {t:'依頼を1つ届けよう', h:'店の外の掲示板。指定の料理を作って届ける', chk:s => (s.stat.orders || 0) >= 1, r:150, un:['staff']},
+  {t:'依頼を1つ届けよう', h:'①店の外の掲示板で依頼を見る（料理の名前と材料のヒント）②その料理を作る ③棚に並べずに、できあがり画面か掲示板の「届ける」で渡す', chk:s => (s.stat.orders || 0) >= 1, r:150, un:['staff']},
   {t:'従業員を雇おう', h:'下の「従業員」から雇える。留守中も働いてくれる', chk:s => Object.values(s.staff).some(v => v > 0), r:150, un:['fishing']},
   {t:'釣りをしてみよう', h:'外の市場の「道具」で釣り竿を買い、農場の生簀か店の外の桟橋へ', chk:s => s.stat.fished > 0, r:100, un:['forage']},
   {t:'森と浜で採集しよう', h:'店の外の道を下へ。光っている物を拾う', chk:s => (s.stat.foraged || 0) >= 1, r:120, un:['season']},
@@ -768,11 +768,11 @@ const ingLabel = id => isKnown(id) ? ingName(id) : '？？？';
 function ingIc(id, px, g = false, forceShow = false) { return icHTML(ING[INGI[id]].icon, px, g ? 'gold' : (isKnown(id) || forceShow ? 'atlas' : 'sil'), null, 'i:' + id); }
 function tipText(t) {
   const [k, v] = [t.slice(0, 1), t.slice(2)];
-  if (k === 'i') { const g = ING[INGI[v]]; if (!isKnown(v)) return `<b>？？？</b><br>${srcText(g)}<br><span style="color:var(--sub)">まだ手に入れていない食材</span>`;
+  if (k === 'i') { const g = ING[INGI[v]]; if (!isKnown(v)) return ingObtainable(v) ? `<b>${g.name}</b><br>${srcText(g)}<br><span style="color:var(--sub)">まだ手に入れていない食材</span>` : `<b>？？？</b><br><span style="color:var(--sub)">話が進むと手に入る食材</span>`;
     return `<b>${g.name}</b>　価値 ${g.value}G<br>${g.desc}<br>${qHTML(qOf(v))}　${seasonText(v)}<br><span style="color:var(--sub)">${srcText(g)}　所持 ${haveIng(v)}${haveIng(v, true) ? '（金 ' + haveIng(v, true) + '）' : ''}</span><br>${tasteHTML(ING[INGI[v]].taste)}${typeof itemUses === 'function' ? itemUses(v) : ''}`; }
   if (k === 'd') { const g = v.endsWith('*'), key = g ? v.slice(0, -1) : v, d = dishInfo(key);
     return `<b>${g ? '金色の' : ''}${d.name}</b>${monTag(key)} ${mastStars(key)}　価値 ${fmt(dval(key, g))}G<br>${d.method}：${d.ings.map(ingLabel).join('・')}${key[0] === 'c' ? (S.creative[key] && S.creative[key].ai ? `<br><span style="color:#8ad0c8">✨オリジナル（${S.creative[key].score}点）${S.creative[key].desc || ''}</span>` : '<br><span style="color:var(--sub)">創作料理</span>') : ''}<br>${qHTML(dqOf(key))}<br>${tasteHTML(dishTaste(key))}`; }
-  if (k === 'r') { const r = REC[+v]; return S.known.r[v] || S.learned[v] ? `<b>${r.name}</b>　${fmt(r.value)}G<br>${r.method}：${r.ings.map(ingLabel).join('・')}` : `<b>？？？</b><br>調理法「${r.method}」・食材${r.ings.length}品`; }
+  if (k === 'r') { const r = REC[+v]; return S.known.r[v] || S.learned[v] ? `<b>${r.name}</b>　${fmt(r.value)}G<br>${r.method}：${r.ings.map(ingLabel).join('・')}` : recMakeable(+v) && !SECRET_R.has(+v) ? `<b>${r.name}</b>　<span style="color:var(--sub)">まだ作ったことがない</span><br>調理法「${r.method}」・食材${r.ings.length}品` : `<b>？？？</b><br>調理法「${r.method}」・食材${r.ings.length}品<br><span style="color:var(--sub)">話が進むと手に入る食材を使うらしい</span>`; }
   if (k === 's') { const g = ING[INGI[v]]; return `<b>${g.name}の種</b><br>育成 ${g.src[2] >= 60 ? (g.src[2] / 60) + '分' : g.src[2] + '秒'}（水やりで短縮）<br>${seasonText(v) || '旬：なし（一年中）'}${FANTASY.has(v) ? '<br>温室が必要' : ''}<br><span style="color:var(--sub)">持ち物で選んで、空いた区画をタップで植える</span>`; }
   if (k === 't') { const tl = TOOLI[v]; return `<b>${tl.name}</b><br>${tl.desc}`; }
   return '';
@@ -1310,16 +1310,56 @@ function simulate(sec) {
   while (left > 0) { const d = Math.min(2, left); step(d, false); left -= d; }
   simulating = false; const r = rep_; r.gold = S.gold - g0; r.sec = Math.min(sec, OFFLINE_CAP); return r;
 }
+// v0.50：いま手に入る材料で作れる料理だけを依頼に出す
+function ingObtainable(id) {   // いまの進み具合で手に入る食材か（話が進んでから手に入る食材は false）
+  const g = ING[INGI[id]]; if (!g) return false; const k = g.src[0], a = g.src[1];
+  if (haveIng(id) >= 2) return true;
+  switch (k) {
+    case 'market': case 'seed': case 'item': return true;
+    case 'pier': case 'pond': case 'lake': case 'nushi': return unl('fishing');
+    case 'forage': { const b = BIOS.find(x => x.zones.includes(a)); return unl('forage') && (!b || b.sc === 'wilds' || !b.cond || b.cond()); }
+    case 'tree': return unl('ranch');
+    case 'proc': return unl('machines');
+    case 'mine': case 'ore': return unl('mine') && (mineState().max || 0) >= Math.max(0, ((+a || 1) - 1) * 10);
+    case 'merchant': return unl('merchant');
+    case 'night': return unl('night');
+    case 'cellar': return unl('cellar');
+    case 'deep': return unl('abyss');
+    case 'town': return townOpen(a);
+    case 'dungeon': return DGD[a] ? dgOpen(a) : unl('dungeon');
+    case 'mregg': return unl('mranch');
+    case 'herb': case 'potion': return unl('herb');
+    case 'tmap': return unl('tmap');
+    case 'mfarm': return unl('mirror');
+    default: return false;   // 伝説の食材などは、手に入れるまで秘密
+  }
+}
+const recMakeable = ri => REC[ri].ings.every(ingObtainable);
 function refillOrders() {
-  const known = Object.keys(S.known.r).map(Number);
-  const pool = known.length >= 3 ? known : ['焼きトマト','目玉焼き','白ごはん','アジの塩焼き','ゆで卵','冷やしトマト'].map(n => REC.findIndex(r => r.name === n)).filter(i => i >= 0);
-  while (S.orders.length < 3) {
-    const ri = pick(pool), n = 1 + Math.floor(Math.random() * 3);
-    if (S.orders.some(o => o.ri === ri)) { if (pool.length <= 3) break; continue; }
+  const known = Object.keys(S.known.r).map(Number).filter(recMakeable);
+  const starter = ['焼きトマト', '目玉焼き', '白ごはん', 'ゆで卵', '冷やしトマト', 'アジの塩焼き', 'サバの塩焼き'].map(n => REC.findIndex(r => r.name === n)).filter(i => i >= 0 && recMakeable(i));
+  const easy = REC.map((r, i) => i).filter(i => REC[i].ings.length <= 3 && !SECRET_R.has(i) && recMakeable(i) && REC[i].value <= 60 + 15 * Object.keys(S.known.r).length);
+  let g = 0;
+  while (S.orders.length < 3 && g++ < 40) {
+    const pool = known.length >= 3 && Math.random() < .75 ? known : (starter.length && known.length < 3 ? starter : easy.length ? easy : known);
+    if (!pool.length) break;
+    const ri = pick(pool), n = 1 + Math.floor(Math.random() * (known.length < 3 ? 2 : 3));
+    if (S.orders.some(o => o.ri === ri)) continue;
     S.orders.push({ri, n, reward: Math.round(REC[ri].value * n * 2), who: pick(RESIDENTS).name});
   }
 }
-
+// 依頼の料理の名前とヒント（作ったことがない料理は、名前・調理法・材料の数・材料1つ）
+function recHint(ri) {
+  const r = REC[ri], kn = S.known.r[ri] || S.learned[ri];
+  if (kn) return `${r.method}：${r.ings.map(ingName).join('・')}`;
+  const shown = r.ings[0];
+  return `${r.method}・材料${r.ings.length}つ：${ingName(shown)}${r.ings.length > 1 ? '＋' + Array(r.ings.length - 1).fill('？').join('＋') : ''}`;
+}
+function deliverOrder(i, re) {
+  const o = S.orders[i]; if (!o || haveDish('r' + o.ri) < o.n) return false;
+  takeDish('r' + o.ri, false, o.n); sfx('coin'); S.stat.orders = (S.stat.orders || 0) + 1; dayTrack().orders++; S.gold += o.reward; S.rep = Math.min(100, S.rep + 2 * repDim()); S.orders.splice(i, 1);
+  toast(`📜 依頼達成！ ${o.who}に届けて ${fmt(o.reward)}G を受け取った。`); dirty = true; if (re) re(); return true;
+}
 // ====================================================== rendering
 let tNow = 0, camY = 0;
 const bgImg = () => scene === 'guild' ? IMG['bg_guild' + guildStage()] : scene === 'mine' ? (FL && FL.vault ? IMG.bg_vault : FL && FL.ak ? IMG.bg_ancient : FL && FL.dg ? IMG[(FL.boss ? 'bg_dgb_' : 'bg_dg_') + FL.dg] : FL && FL.v ? IMG['bg_deep_' + FL.v] : IMG['bg_mine' + layerOf(FL ? FL.f : 1)]) : scene === 'farm' ? IMG[S.fac.orchard ? (S.fac.greenhouse ? 'bg_farm4' : 'bg_farm3') : (S.fac.greenhouse ? 'bg_farm2' : 'bg_farm')] : IMG['bg_' + scene];
@@ -1930,13 +1970,18 @@ function doCook(n) {
   const html = `<div class="result">${dishIcHTML(key, U * 34, gold)}<div class="nm">${gold ? '金色の' : ''}${name} ×${n}</div>
     ${isNew ? `<div class="badge">${ri != null ? '新しいレシピを発見！' : '創作料理が誕生！'}</div>` : ''}
     <div class="p">価値 ${fmt(v)}G ${mastStars(key)}　${qHTML(dqOf(key))}　${ri == null ? '（創作料理は正規のレシピより価値が低め）' : ''}</div><div>${tasteHTML(dishTaste(key))}</div>${nearMsg}</div>
-    ${aiButtonHTML(key)}<div style="height:${U * 1.4}px"></div><div class="btn big" data-a="again">続けて作る</div><div style="height:${U * 1.4}px"></div><div class="btn big blu" data-a="shelf">陳列棚へ</div>`;
+    ${ordBtnHTML(key)}${aiButtonHTML(key)}<div style="height:${U * 1.4}px"></div><div class="btn big" data-a="again">続けて作る</div><div style="height:${U * 1.4}px"></div><div class="btn big blu" data-a="shelf">陳列棚へ</div>`;
   modal('できあがり', html, 'cookres');
   bind('[data-ai]', (d, el) => aiNameDish(d.ai, el));
+  bind('[data-od]', d => { if (deliverOrder(+d.od)) { closeModal(); } });
   bind('[data-a]', d => d.a === 'again' ? (cook.slots = cook.slots.filter(s => haveIng(s.id, s.g) > 0), renderCook()) : openShelf(-1));
   if (isNew && ri != null) toast(`レシピ「${name}」を図鑑に登録した。従業員も作れるようになる。`);
 }
 
+function ordBtnHTML(key) {
+  if (!unl('orders') || !S.orders) return ''; const i = S.orders.findIndex(o => 'r' + o.ri === key); if (i < 0) return ''; const o = S.orders[i], h = haveDish(key);
+  return h >= o.n ? `<div class="btn big grn" data-od="${i}" style="margin-bottom:${U * 1.4}px">📜 依頼に届ける（${o.who}・×${o.n}・${fmt(o.reward)}G）</div>` : `<div class="p" style="color:#e8c060">📜 ${o.who}の依頼の料理！ あと${o.n - h}皿で届けられる（棚に並べると売れてしまうので注意）</div>`;
+}
 const hintCost = () => { const H = S.hint && !S.known.r[S.hint.ri] && !S.learned[S.hint.ri] && S.hint.ings ? S.hint : null; return H && H.ings.length < REC[H.ri].ings.length - 1 ? 100 + 60 * H.ings.length : 100; };
 function nearRecipe(method, ids) {
   const cnt = a => a.reduce((m, x) => (m[x] = (m[x] || 0) + 1, m), {});
@@ -2581,14 +2626,16 @@ function openOrders() {
   if (S.resv) { const d = dishInfo(S.resv.key), have = haveDish(S.resv.key);
     rs = `<div class="h">🍷 宴会の予約</div><div class="row">${dishIcHTML(S.resv.key, U * 11)}<div class="t"><b>${d.name} ×${S.resv.n}</b><span>${S.resv.who}　報酬 ${fmt(S.resv.reward)}G＋評判　あと${fmtLeft(S.resv.due - S.t)}　手持ち ${have}</span></div><div class="btn ${have >= S.resv.n ? 'grn' : 'dis'}" data-rs="1">届ける</div></div><div class="h">住民の依頼</div>`; }
   const rv = (S.reviews || []).length ? `<div class="h">📰 評論家の記事</div>` + S.reviews.map(r => `<div class="row"><div class="t"><b>${r.stars ? '★'.repeat(r.stars) + '☆'.repeat(5 - r.stars) + '　' + r.name : '空振り'}</b><span>${r.text}</span></div></div>`).join('') : '';
-  const html = contestHTML() + rs + `<div class="p">住民からの特別な注文。届けると通常の2倍の報酬。</div>` + S.orders.map((o, i) => {
-    const r = REC[o.ri], have = haveDish('r' + o.ri), kn = S.known.r[o.ri];
-    return `<div class="row">${icHTML(r.icon, U * 11, kn ? 'atlas' : 'sil')}<div class="t"><b>${kn ? r.name : '？？？（' + r.method + '・' + r.ings.length + '品）'} ×${o.n}</b><span>${o.who}より　報酬 ${fmt(o.reward)}G　手持ち ${have}</span></div><div class="btn ${have >= o.n ? 'grn' : 'dis'}" data-i="${i}">届ける</div></div>`;
+  const rr = S.ordRr !== gday();
+  const html = contestHTML() + rs + `<div class="p">住民からの特別な注文。<b>①書いてある料理を作る → ②棚に並べずに「届ける」</b>（作った直後の画面からも届けられる）。報酬は通常の2倍。${rr ? '<br>作れそうにない依頼は、1日1回だけ「入れ替え」できる。' : ''}</div>` + S.orders.map((o, i) => {
+    const r = REC[o.ri], have = haveDish('r' + o.ri), kn = S.known.r[o.ri] || S.learned[o.ri];
+    return `<div class="row">${icHTML(r.icon, U * 11, kn ? 'atlas' : 'sil')}<div class="t"><b>${r.name} ×${o.n}${kn ? '' : '<span style="color:#e8c060;font-weight:normal">（まだ作ったことがない）</span>'}</b><span>${recHint(o.ri)}<br>${o.who}より　報酬 ${fmt(o.reward)}G　手持ち ${have}/${o.n}</span></div><div style="display:flex;flex-direction:column;gap:${U * .8}px"><div class="btn ${have >= o.n ? 'grn' : 'dis'}" data-i="${i}">届ける</div>${rr && have < o.n ? `<div class="btn" data-rr="${i}" style="font-size:.85em">入れ替え</div>` : ''}</div></div>`;
   }).join('');
   modal('依頼の掲示板', ooHTML() + html + rv, 'orders'); ooBind(openOrders);
   bind('[data-contest]', () => openContest());
   bind('[data-rs]', () => { const r = S.resv; if (!r || haveDish(r.key) < r.n) return; takeDish(r.key, false, r.n); S.gold += r.reward; S.rep = Math.min(100, S.rep + repGain(5) * repDim()); S.resv = null; S.resvT = 1500; sfx('ok'); toast(`宴会は大成功！ ${fmt(r.reward)}G を受け取った。`); openOrders(); });
-  bind('[data-i]', d => { const o = S.orders[d.i]; if (haveDish('r' + o.ri) < o.n) return; takeDish('r' + o.ri, false, o.n); sfx('coin'); S.stat.orders = (S.stat.orders || 0) + 1; dayTrack().orders++; S.gold += o.reward; S.rep = Math.min(100, S.rep + 2 * repDim()); S.orders.splice(d.i, 1); toast(`依頼達成！ ${fmt(o.reward)}G を受け取った。`); openOrders(); });
+  bind('[data-i]', d => deliverOrder(+d.i, openOrders));
+  bind('[data-rr]', d => { if (S.ordRr === gday()) return; S.ordRr = gday(); S.orders.splice(+d.rr, 1); refillOrders(); sfx('tick'); toast('📜 依頼を1つ入れ替えた（次は明日から）。'); openOrders(); });
 }
 
 // ---------- fishing (v0.9): cast → bite → reel (+ tension for ヌシ) → catch cut
@@ -2967,7 +3014,7 @@ const TUT = {
   m_market:['霧月通りの市場', '種・食材・道具・本・買取の5つの売り場。<br>市場の食材は品質★1。畑や釣りで手に入れた物のほうが良い料理になる。'],
   m_fac:['施設', 'お金（と一部は鉱石）で店や農場を強化する。<br>新しい施設は、建てた時に使い方が出る。'],
   m_staff:['従業員', '雇うと留守中も仕事をしてくれる（最大8時間分）。<br>料理人は覚えたレシピを作り、店員は自動で棚に並べて売る。'],
-  m_orders:['依頼の掲示板', '住民の注文。指定の料理を届けると報酬。<br>宴会の予約・評論家の記事・料理コンテストもここで見られる。'],
+  m_orders:['依頼の掲示板', '住民の注文。<b>①書いてある料理を作る</b>（まだ作ったことがない料理は、名前・調理法・材料の数・材料1つがヒント。残りの材料はかまどで試して探す）<br><b>②棚に並べずに「届ける」</b>。作った直後の「できあがり」画面からも届けられる。棚に並べるとお客さんが買ってしまうので注意。<br>作れそうにない依頼は、1日1回「入れ替え」できる。<br>宴会の予約・評論家の記事・料理コンテストもここで見られる。'],
   m_rec:['レシピ帳', '覚えたレシピと、作ったことのあるレシピ。<br>本を買うか、住民や常連客と仲良くなると増える。'],
   m_dex:['図鑑', '料理・食材・加工品・鉱石・釣り・常連客の記録。<br>未発見のものはシルエットで表示される。'],
   m_forge:['鍛冶屋ガルド', 'ツルハシと剣を、鉱石を使って1段階上に作り直せる。<br>宝石で器も作れる（棚に置くと料理の価値が上がる）。'],
@@ -4822,7 +4869,7 @@ const MAN = [
     '店員を雇うと「自動販売」ができる。値付けの方針（安め・通常・強気）を選べる。',
     '店の格（屋台級→町の食堂→評判の店→名店→伝説の宵闇亭）は評判と売った皿数で上がり、客が増えて高い物も買われるようになる。',
     '評判は高くなるほど上がりにくい。'])},
-  {k:'orders', t:'依頼の掲示板', c:() => unl('orders'), h:() => li(['店の外（広場の右上）の掲示板に、料理の注文が貼られる。期限までに届けるとお金と評判。', '倉庫・カバン・棚のどこにある料理でも届けられる。', '宴会の予約（たくさんの皿）が入ることもある。暦にも載る。'])},
+  {k:'orders', t:'依頼の掲示板', c:() => unl('orders'), h:() => li(['店の外（広場の右上）の掲示板に、料理の注文が貼られる。期限までに届けるとお金と評判。', 'まだ作ったことがない料理は、名前・調理法・材料の数・材料1つがヒントとして書いてある（残りはかまどで試して探す）。依頼に出るのは、いま手に入る材料で作れる料理だけ。', '倉庫・カバン・棚のどこにある料理でも届けられる。ただし棚に並べるとお客さんが買ってしまう。作った直後の「できあがり」画面の「📜 依頼に届ける」が確実。', '作れそうにない依頼は、1日1回「入れ替え」できる。', '宴会の予約（たくさんの皿）が入ることもある。暦にも載る。'])},
   {k:'staff', t:'従業員', c:() => unl('staff'), h:() => li(Object.values(STAFF).map(s => `<b>${s.name}</b>：${s.desc}（最大${s.max}人）`).concat([
     '従業員は働くとLvが上がり、速くなる。Lv5とLv10で得意技を1つ選べる。',
     '<b>自動仕入れの予算</b>：料理人の材料・農夫の種を市場で買う1日の上限。朝6時の所持金の20〜80%（所持金の25%は必ず残す）。',
@@ -5771,7 +5818,7 @@ function portWanted(t) {
 function openPortTrade() {
   const t = curTown(), C_ = TOWNC[t], T = expToday(t), lv = expLv(t), wants = portWanted(t); tut('exp_trade');
   const html = `<div class="p">${C_.tradeTalk}<br>1品につき1日5個まで。値段は普通の<b>2.5倍</b>${lv >= 3 ? '（評判Lv3以上で3倍）' : ''}。</div>` + wants.map(id => { const got = T.trade[id] || 0, p = Math.round(ING[INGI[id]].value * (lv >= 3 ? 3 : 2.5)), h = haveIng(id);
-    return `<div class="row">${ingIc(id, U * 11)}<div class="t"><b>求む：${S.known.i[id] ? ingName(id) : '？？？'}</b><span>1個 ${fmt(p)}G　今日 ${got}/5　持っている ${h}${S.known.i[id] ? '' : '　（' + srcText(ING[INGI[id]]) + '）'}</span></div><div class="btn ${h && got < 5 ? '' : 'dis'}" data-tr="${id}">売る</div></div>`; }).join('');
+    return `<div class="row">${ingIc(id, U * 11)}<div class="t"><b>求む：${ingName(id)}</b><span>1個 ${fmt(p)}G　今日 ${got}/5　持っている ${h}${S.known.i[id] ? '' : '　（' + srcText(ING[INGI[id]]) + '）'}</span></div><div class="btn ${h && got < 5 ? '' : 'dis'}" data-tr="${id}">売る</div></div>`; }).join('');
   modal(C_.trN || '交易所', html + (unl('arms') ? '<div class="btn big blu" data-a="tarms" style="margin-top:4px">⚔ この町の武器屋</div>' : ''), 'trade2');
   bind('[data-a=tarms]', () => openTownArms());
   bind('[data-tr]', d => { const id = d.tr, T2 = expToday(t), got = T2.trade[id] || 0, n = Math.min(5 - got, haveIng(id)); if (n <= 0) return;
@@ -5942,7 +5989,7 @@ function qProg(q) {
 }
 function qText(q) {
   if (q.t === 'kill') return [`討伐：${MONT[q.k].n}を${q.n}体`, `すむ場所：${monHome(q.k)}`];
-  if (q.t === 'item') return [`素材集め：${S.known.i[q.id] ? ingName(q.id) : '？？？'}を${q.n}個`, srcText(ING[INGI[q.id]])];
+  if (q.t === 'item') return [`素材集め：${ingName(q.id)}を${q.n}個`, srcText(ING[INGI[q.id]])];
   if (q.t === 'dish') return [`料理の納品：${REC[q.ri].name}を${q.n}皿`, '冒険者たちの食事に'];
   return [`踏破：地下迷宮のB${q.f}まで行く`, '依頼が出てから、その階に着けば達成'];
 }
@@ -6984,7 +7031,8 @@ function todoList() {
   const ripe = S.plots.slice(0, plotCount()).filter(ready).length; if (ripe) add_('🌾', `農場の作物が${ripe}つ実っている`, 'farm');
   const empty = S.plots.slice(0, plotCount()).filter(p => !p.seed).length; if (empty && unl('quality')) add_('🌱', `農場の空いた区画が${empty}つ`, 'farm');
   if (S.fac.cellar && S.cellar && S.cellar.slots) { const n = S.cellar.slots.filter(x => x && celDone(x)).length; if (n) add_('🍷', `地下貯蔵庫の熟成が${n}台できあがった`, 'cellar'); }
-  if (unl('orders') && S.orders) { const n = S.orders.filter(o => haveDish('r' + o.ri, false) + haveDish('r' + o.ri, true) >= o.n).length; if (n) add_('📜', `届けられる依頼が${n}件（掲示板）`, 'outside'); }
+  if (unl('orders') && S.orders) { const n = S.orders.filter(o => haveDish('r' + o.ri, false) + haveDish('r' + o.ri, true) >= o.n).length; if (n) add_('📜', `届けられる依頼が${n}件（掲示板）`, 'outside');
+    else if (!(S.stat.orders > 0) && S.orders.length) { const o = S.orders[0]; add_('📜', `依頼：${REC[o.ri].name}を${o.n}皿作って届ける（${recHint(o.ri)}）`, 'outside'); } }
   if (unl('guild') && S.guild) { const qs = guildQuests(); const n = qs.filter(q => !q.done && (() => { const [a, b] = qProg(q); return a >= b; })()).length; if (n) add_('🛡', `ギルドに報告できる依頼が${n}件`, 'guild');
     if (S.guild.rank < 8 && S.guild.gp >= GUILD_TH[S.guild.rank + 1] && !S.guild.exam) add_('🛡', '昇格試験を受けられる（ギルドの受付）', 'guild'); }
   if (unl('mranch') && S.mr) { const R = S.mr, o = Object.values(R.out || {}).reduce((a, b) => a + b, 0); if (o) add_('🧺', `魔物牧場の素材が${o}個たまっている`, 'mranch'); if (R.mons.length && R.feed < R.mons.length) add_('🌾', '魔物牧場のえさ箱が少ない', 'mranch');
