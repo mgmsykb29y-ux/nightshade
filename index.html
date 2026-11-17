@@ -1868,11 +1868,11 @@ function openPlant(i, all = false, area = null, hoe = null) {
   const empty = [...Array(plotCount()).keys()].filter(j => !S.plots[j].seed);
   const target = i != null && !all && !S.plots[i].seed ? i : null;
   if (area) { const a2 = area.filter(j => !S.plots[j].seed);
-    modal('クワでまとめて植える', `<div class="p">空き区画 <b>${a2.length}</b> にまとめて植える（種が無いときは自動で購入）</div>` + list.map(g => `<div class="row" data-id="${g.id}">${ingIc(g.id, U * 11, false, !!haveSeed(g.id))}<div class="t"><b>${isKnown(g.id) || haveSeed(g.id) ? g.name : '？？？'}</b><span>所持 ${haveSeed(g.id)}　種 ${g.src[1]}G</span></div><div class="btn">植える</div></div>`).join(''), 'plant');
+    modal('クワでまとめて植える', `<div class="p">空き区画 <b>${a2.length}</b> にまとめて植える（種が無いときは自動で購入）</div>` + list.map(g => `<div class="row" data-id="${g.id}">${ingIc(g.id, U * 11, false, !!haveSeed(g.id))}<div class="t"><b>${g.name}</b><span>所持 ${haveSeed(g.id)}　種 ${g.src[1]}G</span></div><div class="btn">植える</div></div>`).join(''), 'plant');
     bind('.row', d => { let n = 0; for (const j of a2) { if (plantPlot(j, d.id, true)) n++; else break; } if (!n) return toast('お金が足りない。'); if (hoe) useTool(hoe); sfx('pop'); toast(`${ingName(d.id)}を${n}か所に植えた。`, 1500); syncBag(); closeModal(); });
     return; }
   const html = `<div class="p">${all ? '空いている区画<b>すべて</b>に植えます。' : target != null ? 'タップした区画に植えます。続けて別の種も選べます。' : '空いている区画に1つずつ植えます。続けて選べます。'}<br>空き区画 <b>${empty.length}</b>　種が無いときは自動で購入</div>` +
-    list.map(g => `<div class="row" data-id="${g.id}">${ingIc(g.id, U * 11, false, !!haveSeed(g.id))}<div class="t"><b>${isKnown(g.id) || haveSeed(g.id) ? g.name : '？？？'}${haveSeed(g.id) || isKnown(g.id) ? '' : '<span style="color:var(--sub);font-weight:400">（植えると判明）</span>'}</b><span>所持 ${haveSeed(g.id)}　育成 ${g.src[2] >= 60 ? (g.src[2] / 60) + '分' : g.src[2] + '秒'}　種 ${g.src[1]}G</span></div><div class="btn ${empty.length ? '' : 'dis'}">${all ? 'すべて' : '植える'}</div></div>`).join('');
+    list.map(g => `<div class="row" data-id="${g.id}">${ingIc(g.id, U * 11, false, !!haveSeed(g.id))}<div class="t"><b>${g.name}${haveSeed(g.id) || isKnown(g.id) ? '' : ''}</b><span>所持 ${haveSeed(g.id)}　育成 ${g.src[2] >= 60 ? (g.src[2] / 60) + '分' : g.src[2] + '秒'}　種 ${g.src[1]}G</span></div><div class="btn ${empty.length ? '' : 'dis'}">${all ? 'すべて' : '植える'}</div></div>`).join('');
   modal(all ? 'まとめて植える' : '種を植える', html, 'plant');
   bind('.row', d => {
     const targets = target != null ? [target] : all ? empty : empty.slice(0, 1);
@@ -2552,7 +2552,7 @@ function openMarket() {
     (mkTab === 'seed' && !S.fac.greenhouse ? '<div class="p">温室を建てると、幻想の作物の種も並ぶ。</div>' : '') +
     list.map(g => { const p = g.src[1]; const own = mkTab === 'seed' ? (S.seeds[g.id] || 0) : (S.inv[g.id] || 0);
       const shown = isKnown(g.id) || (mkTab === 'seed' && S.seeds[g.id]);
-      return `<div class="row">${ingIc(g.id, U * 11, false, shown)}<div class="t"><b>${shown ? g.name : '？？？'}${mkTab === 'seed' ? 'の種' : ''}</b><span>${p}G　所持 ${own}</span></div><div class="btn ${S.gold >= p ? '' : 'dis'}" data-id="${g.id}" data-n="1">×1</div><div class="btn ${S.gold >= p * 5 ? '' : 'dis'}" data-id="${g.id}" data-n="5">×5</div></div>`; }).join('');
+      return `<div class="row">${ingIc(g.id, U * 11, false, shown)}<div class="t"><b>${g.name}${mkTab === 'seed' ? 'の種' : ''}</b><span>${p}G　所持 ${own}${shown ? '' : '　<span style="color:#e8c060">まだ使ったことがない</span>'}</span></div><div class="btn ${S.gold >= p ? '' : 'dis'}" data-id="${g.id}" data-n="1">×1</div><div class="btn ${S.gold >= p * 5 ? '' : 'dis'}" data-id="${g.id}" data-n="5">×5</div></div>`; }).join('');
   modal('霧月通りの市場', html, 'market');
   bind('[data-t]', d => { mkTab = d.t; openMarket(); });
   bind('.btn[data-id]', d => {
