@@ -1015,11 +1015,14 @@ function nbRecord(key, g, price, re) {
   if (re === 'no') for (const q of ['cheap', 'fair', 'pricey']) if (n[q] && n[q] >= price) delete n[q];
 }
 function buyMarket(id, n) { const g = ING[INGI[id]]; const cost = g.src[1] * n; if (S.gold < cost) return false; S.gold -= cost; withQ(1, () => add(S.inv, id, n)); S.known.i[id] = true; return true; }
+// v0.52.4：作るリストに必要な食材は、料理人が倉庫から使わずに取っておく（カバン・持ち物にある分は差し引く）
+function wishHold(id) { if (!S.wish || !Object.keys(S.wish).length) return 0; const n = wishNeed()[id] || 0; return n ? Math.max(0, n - bagCount('i', id, false)) : 0; }
+const staffAvail = id => Math.max(0, (S.inv[id] || 0) - wishHold(id));
 function canCook(r, autoBuy) {
   const need = {}; r.ings.forEach(id => need[id] = (need[id] || 0) + 1);
   let cost = 0;
   for (const id in need) {
-    const lack = need[id] - (S.inv[id] || 0);
+    const lack = need[id] - staffAvail(id);
     if (lack > 0) { const g = ING[INGI[id]]; if (!autoBuy || g.src[0] !== 'market') return -1; cost += g.src[1] * lack; }
   }
   return cost;
@@ -1046,7 +1049,7 @@ function staffCook(ci = 0) {
   const o = opts[Math.min(opts.length - 1, Math.floor(Math.random() * Math.min(3, opts.length)))];
   const r = REC[o.ri];
   if (o.c > 0) spend(o.c);
-  r.ings.forEach(id => { if (!S.inv[id] && buyMarket(id, 1) && ce.p10 === 'thrift') S.gold += Math.round(ING[INGI[id]].src[1] * .2); });
+  { const use = {}; r.ings.forEach(id => { use[id] = (use[id] || 0) + 1; if (staffAvail(id) < use[id] && buyMarket(id, 1) && ce.p10 === 'thrift') S.gold += Math.round(ING[INGI[id]].src[1] * .2); }); }
   const sq = r.ings.reduce((a, id) => a + qOf(id), 0) / r.ings.length + (ce.p5 === 'plate' ? .3 : 0) + (ce.master ? .3 : 0); r.ings.forEach(id => add(S.inv, id, -1));
   blendDQ('r' + o.ri, 1, Math.min(3, sq)); add(ce.p10 === 'gold' && Math.random() < .08 ? S.dishG : S.dish, 'r' + o.ri, 1); S.stat.cooked++; S.mast['r' + o.ri] = (S.mast['r' + o.ri] || 0) + 1; ultCooked('r' + o.ri);
   return r;
@@ -1923,7 +1926,7 @@ function wishHTML() {
   return `<div class="h">📝 作るリスト（${ks.length}品）</div>` + ks.map(ri => { const r = REC[ri], n = w[ri], cnt = {}; r.ings.forEach(id => cnt[id] = (cnt[id] || 0) + 1);
     const ok = Object.keys(cnt).every(id => haveAnyIng(id) >= cnt[id] * n);
     return `<div class="row">${icHTML(r.icon, U * 11, 'atlas', null, 'r:' + ri)}<div class="t"><b>${r.name} ×${n}${ok ? ' <span style="color:#8ad08a;font-weight:normal">材料そろった</span>' : ''}</b><span>${r.method}：${Object.keys(cnt).map(id => { const h = haveAnyIng(id), nd = cnt[id] * n; return `<span class="chipin ${h >= nd ? 'ok' : 'ng'}">${ingLabel(id)} ${h}/${nd}</span>`; }).join('')}</span></div><div style="display:flex;gap:${U * .6}px;align-items:center"><div class="btn" data-wn="${ri}:-1">−</div><div class="btn" data-wn="${ri}:1">＋</div><div class="btn" data-wx="${ri}">✕</div></div></div>`; }).join('')
-    + `<div class="p" style="color:var(--sub)">足りない食材の合計：${Object.keys(need).filter(id => haveAnyIng(id) < need[id]).map(id => `${ingLabel(id)}×${need[id] - haveAnyIng(id)}`).join('・') || 'なし（全部そろっている）'}</div>`;
+    + `<div class="p" style="color:#8ad0c8">🔒 作るリストの材料は、料理人が使わずに取っておく（作るたびにリストの皿数が減り、0になると外れる）</div><div class="p" style="color:var(--sub)">足りない食材の合計：${Object.keys(need).filter(id => haveAnyIng(id) < need[id]).map(id => `${ingLabel(id)}×${need[id] - haveAnyIng(id)}`).join('・') || 'なし（全部そろっている）'}</div>`;
 }
 const wishStar = ri => `<div class="btn" data-wl="${ri}" style="min-width:${U * 7}px;${wishL()[ri] ? 'color:#ffd860' : 'color:var(--sub)'}">${wishL()[ri] ? '★' : '☆'}</div>`;
 function ingChips(r, reveal) { const need = {}; r.ings.forEach(id => need[id] = (need[id] || 0) + 1);
@@ -1973,7 +1976,8 @@ function doCook(n) {
   const cq = cook.slots.reduce((a, s) => a + (s.g ? 3 : qOf(s.id)), 0) / cook.slots.length;
   for (const s of cook.slots) takeIng(s.id, s.g, n);
   let key, isNew = false, name;
-  if (ri != null) { key = 'r' + ri; isNew = !S.known.r[ri]; S.known.r[ri] = true; if (S.menu[ri] === undefined) S.menu[ri] = true; name = REC[ri].name; }
+  if (ri != null) { key = 'r' + ri; isNew = !S.known.r[ri]; S.known.r[ri] = true; if (S.menu[ri] === undefined) S.menu[ri] = true; name = REC[ri].name;
+    if (S.wish && S.wish[ri]) { S.wish[ri]--; if (S.wish[ri] <= 0) { delete S.wish[ri]; setTimeout(() => toast(`📝 作るリストの「${name}」を作り終えた。取り置いていた材料は、料理人も使えるようになる。`, 3500), 600); } } }
   else {
     key = 'c:' + k; const ids = cook.slots.map(s => s.id);
     if (!S.creative[key]) {
@@ -2582,7 +2586,7 @@ function openMarket() {
     (mkTab === 'seed' && !S.fac.greenhouse ? '<div class="p">温室を建てると、幻想の作物の種も並ぶ。</div>' : '') +
     list.map(g => { const p = g.src[1]; const own = mkTab === 'seed' ? (S.seeds[g.id] || 0) : (S.inv[g.id] || 0);
       const shown = isKnown(g.id) || (mkTab === 'seed' && S.seeds[g.id]);
-      return `<div class="row">${ingIc(g.id, U * 11, false, shown)}<div class="t"><b>${need[g.id] ? '<i style="font-style:normal;color:#ffd860">★ </i>' : ''}${g.name}${mkTab === 'seed' ? 'の種' : ''}</b><span>${p}G　所持 ${own}${need[g.id] ? `　<span style="color:${wn(g) > 0 ? '#ffd860' : '#8ad08a'}">作るリスト：${wn(g) > 0 ? 'あと' + wn(g) + '個' : 'そろった'}（必要${need[g.id]}・手持ち${haveAnyIng(g.id)}）</span>` : ''}${shown ? '' : '　<span style="color:#e8c060">まだ使ったことがない</span>'}</span></div><div class="btn ${S.gold >= p ? '' : 'dis'}" data-id="${g.id}" data-n="1">×1</div><div class="btn ${S.gold >= p * 5 ? '' : 'dis'}" data-id="${g.id}" data-n="5">×5</div></div>`; }).join('');
+      return `<div class="row">${ingIc(g.id, U * 11, false, shown)}<div class="t"><b>${need[g.id] ? '<i style="font-style:normal;color:#ffd860">★ </i>' : ''}${g.name}${mkTab === 'seed' ? 'の種' : ''}</b><span>${p}G　所持 ${own}${need[g.id] ? `　<span style="color:${wn(g) > 0 ? '#ffd860' : '#8ad08a'}">作るリスト：${wn(g) > 0 ? 'あと' + wn(g) + '個' : 'そろった'}（必要${need[g.id]}・手持ち${haveAnyIng(g.id)}・料理人は使わない）</span>` : ''}${shown ? '' : '　<span style="color:#e8c060">まだ使ったことがない</span>'}</span></div><div class="btn ${S.gold >= p ? '' : 'dis'}" data-id="${g.id}" data-n="1">×1</div><div class="btn ${S.gold >= p * 5 ? '' : 'dis'}" data-id="${g.id}" data-n="5">×5</div></div>`; }).join('');
   modal('霧月通りの市場', html, 'market');
   bind('[data-t]', d => { mkTab = d.t; openMarket(); });
   bind('.btn[data-id]', d => {
@@ -3048,7 +3052,7 @@ const TUT = {
   m_orders:['依頼の掲示板', '住民の注文。<b>①書いてある料理を作る</b>（まだ作ったことがない料理は、名前・調理法・材料の数・材料1つがヒント。残りの材料はかまどで試して探す）<br><b>②棚に並べずに「届ける」</b>。作った直後の「できあがり」画面からも届けられる。棚に並べるとお客さんが買ってしまうので注意。<br>作れそうにない依頼は、1日1回「入れ替え」できる。<br>宴会の予約・評論家の記事・料理コンテストもここで見られる。'],
   m_forgehut:['鍛冶小屋', '古井戸の下に、ガルドの鍛冶小屋ができた。<br>小屋をタップすると、いつでも鍛冶（ツルハシ・武器・防具・付与・器）ができる。<br>「施設」タブの「⚒ 鍛冶屋ガルド」からも開ける。'],
   m_up:['上の階へ戻る', '降りてきたはしご（画面の上）から、上の階へ戻れる。<br>戻った階は、壊した岩も倒した魔物もそのまま（復活しない）。<br>ツルハシが壊れたときも、はしごを登って地上へ帰れる。'],
-  m_wish:['作るリスト', '☆を押したレシピが「作るリスト」に入る。何品でも入れられ、＋−で皿数も決められる。<br>市場では、必要な食材に★がつき、「あと何個」「必要・手持ち」が出る（★の食材は一覧の上に並ぶ）。<br>レシピ帳のいちばん上で、そろった材料と足りない食材の合計が見られる。'],
+  m_wish:['作るリスト', '☆を押したレシピが「作るリスト」に入る。何品でも入れられ、＋−で皿数も決められる。<br>市場では、必要な食材に★がつき、「あと何個」「必要・手持ち」が出る（★の食材は一覧の上に並ぶ）。<br>レシピ帳のいちばん上で、そろった材料と足りない食材の合計が見られる。<br><b>作るリストの材料は、料理人が倉庫から使わずに取っておく。</b>自分で作るたびに皿数が減り、0になるとリストから外れる。'],
   m_rec:['レシピ帳', '覚えたレシピと、作ったことのあるレシピ。<br>本を買うか、住民や常連客と仲良くなると増える。'],
   m_dex:['図鑑', '料理・食材・加工品・鉱石・釣り・常連客の記録。<br>未発見のものはシルエットで表示される。'],
   m_forge:['鍛冶屋ガルド', 'ツルハシと剣を、鉱石を使って1段階上に作り直せる。<br>宝石で器も作れる（棚に置くと料理の価値が上がる）。'],
@@ -4906,7 +4910,7 @@ const MAN = [
     '店の格（屋台級→町の食堂→評判の店→名店→伝説の宵闇亭）は評判と売った皿数で上がり、客が増えて高い物も買われるようになる。',
     '評判は高くなるほど上がりにくい。'])},
   {k:'forgehut', t:'鍛冶小屋', c:() => true, h:() => li(['古井戸（地下迷宮の入口）の下に、鍛冶屋ガルドの小屋がある。タップで鍛冶の画面。', '「施設」タブのいちばん上の「⚒ 鍛冶屋ガルド」からも、どこにいても開ける。', 'できること：ツルハシの強化・武器を作る・付与・防具・宝石の器・鍛え直し（解放した物だけ）。', '出張販売の屋台は、広場の左下に移った。'])},
-  {k:'wish', t:'作るリスト', c:() => true, h:() => li(['レシピ帳で、レシピの右の☆を押すと「作るリスト」に入る（もう一度押すと外れる）。何品でも入れられる。', 'レシピ帳のいちばん上に作るリスト：＋−で皿数、✕で外す。食材ごとに「手持ち/必要」、材料がそろうと「材料そろった」。', '市場の「食材」「種」では、作るリストに必要な食材に★がつき、一覧の上に並ぶ。「あと○個（必要・手持ち）」も出る。'])},
+  {k:'wish', t:'作るリスト', c:() => true, h:() => li(['レシピ帳で、レシピの右の☆を押すと「作るリスト」に入る（もう一度押すと外れる）。何品でも入れられる。', 'レシピ帳のいちばん上に作るリスト：＋−で皿数、✕で外す。食材ごとに「手持ち/必要」、材料がそろうと「材料そろった」。', '市場の「食材」「種」では、作るリストに必要な食材に★がつき、一覧の上に並ぶ。「あと○個（必要・手持ち）」も出る。', '作るリストに必要な数の食材は、料理人が倉庫から使わない（取り置き）。足りない分は、料理人が自分で市場から買う。自分で作るたびにリストの皿数が1減り、0で外れる。'])},
   {k:'orders', t:'依頼の掲示板', c:() => unl('orders'), h:() => li(['店の外（広場の右上）の掲示板に、料理の注文が貼られる。期限までに届けるとお金と評判。', 'まだ作ったことがない料理は、名前・調理法・材料の数・材料1つがヒントとして書いてある（残りはかまどで試して探す）。依頼に出るのは、いま手に入る材料で作れる料理だけ。', '倉庫・カバン・棚のどこにある料理でも届けられる。ただし棚に並べるとお客さんが買ってしまう。作った直後の「できあがり」画面の「📜 依頼に届ける」が確実。', '作れそうにない依頼は、1日1回「入れ替え」できる。', '宴会の予約（たくさんの皿）が入ることもある。暦にも載る。'])},
   {k:'staff', t:'従業員', c:() => unl('staff'), h:() => li(Object.values(STAFF).map(s => `<b>${s.name}</b>：${s.desc}（最大${s.max}人）`).concat([
     '従業員は働くとLvが上がり、速くなる。Lv5とLv10で得意技を1つ選べる。',
