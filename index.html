@@ -880,6 +880,7 @@ function buildWalk() {
 const walkable = (sc, x, y) => { const cx = x >> 1, cy = y >> 1; return cx >= 0 && cy >= 0 && cx < GW && cy < GH && WALK[sc][cy * GW + cx] === 1; };
 function nearestWalk(sc, x, y) {
   const g = WALK[sc]; let cx = Math.max(0, Math.min(GW - 1, x >> 1)), cy = Math.max(0, Math.min(GH - 1, y >> 1));
+  if (!g) return [cx, cy];
   if (g[cy * GW + cx]) return [cx, cy];
   for (let r = 1; r < 40; r++) { let best = null, bd = 1e9;
     for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) { if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
@@ -8121,7 +8122,7 @@ async function boot() {
   const ls = Math.max(1, Math.floor(144 * U * .9 / IMG.logo.width)); lg.style.width = IMG.logo.width * ls + 'px'; lg.style.height = IMG.logo.height * ls + 'px';
   buildWalk();
   const sv = loadLocal(); let report = null;
-  if (sv && sv.v === 1) { S = sv; try { fixState(); } catch (e) { console.error(e); } if (S.afk && S.afk.on) { introMsg('留守中の時間を進めています…'); await new Promise(r => setTimeout(r, 30)); try { report = simulate((Date.now() - S.afk.t) / 1000); } catch (e) { console.error(e); BOOTERR.push('放置の計算：' + e.message); } S.afk.on = false; } scene = (S.pos && S.pos.scene) || 'interior'; [player.x, player.y] = clampWalk(scene, S.pos.x, S.pos.y); }
+  if (sv && sv.v === 1) { S = sv; try { fixState(); } catch (e) { console.error(e); } if (S.afk && S.afk.on) { introMsg('留守中の時間を進めています…'); await new Promise(r => setTimeout(r, 30)); try { report = simulate((Date.now() - S.afk.t) / 1000); } catch (e) { console.error(e); BOOTERR.push('放置の計算：' + e.message); } S.afk.on = false; } scene = (S.pos && S.pos.scene) || 'interior'; if (!SCENES[scene] && scene !== 'mine') scene = 'interior'; try { [player.x, player.y] = scene === 'mine' ? [72, 52] : clampWalk(scene, S.pos.x, S.pos.y); } catch (e) { BOOTERR.push('位置：' + e.message); scene = 'interior'; player.x = 72; player.y = 200; } }
   else { syncShelf(); refillOrders(); }
   try { mineState(); if (scene === 'mine') { if (S.dg && S.dg.cur) genDgFloor(S.dg.cur.dg, S.dg.cur.f); else if (S.mine.floor) genFloor(S.mine.floor); else { scene = 'outside'; player.x = 48; player.y = 222; } }
   buildActors(); syncHot(); updCam(true); setTabs(); hud(); chips(); applyPad();
