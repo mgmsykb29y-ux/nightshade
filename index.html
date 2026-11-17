@@ -1114,7 +1114,7 @@ function plantPlot(i, id, autoBuy) {
 const ready = p => p.seed && (p.g || 0) >= ING[INGI[p.seed]].src[2];
 const TOOL_DUR = {can1:40, can2:80, can3:120, can4:200, rod1:30, rod2:60, rod3:100, rod4:150, sk1:60, sk2:120, hoe1:80, hoe2:150};
 const STACK = 99, BAG_N = 24;
-const toolInst = uid => S.toolInv.find(t => t.uid === uid);
+const toolInst = uid => S.toolInv.find(t => t.uid === uid && t.dur > 0);   // v0.54：壊れた道具（耐久0）は持てない
 const toolOf = h => TOOLI[(toolInst(h.uid) || {}).id] || {};
 // ----- bag (0-7 hotbar, 8-23 backpack). slot: {k:'i'|'s'|'d'|'t', id|key|uid, g, n}
 const sameItem = (a, b) => a && b && a.k === b.k && a.k !== 't' && (a.id || a.key) === (b.id || b.key) && !!a.g === !!b.g;
@@ -1155,11 +1155,11 @@ function heldItem() {
   return {t:'dish', key:sl.key, g:sl.g};
 }
 function newTool(id) { tut('tool_' + TOOLI[id].kind); const uid = (S.uidN = (S.uidN || 0) + 1); S.toolInv.push({uid, id, dur:TOOL_DUR[id]}); giveTool(uid); return uid; }
-function bestInst(kind) { let b = null; for (const t of S.toolInv) if (TOOLI[t.id].kind === kind && (!b || TOOLI[t.id].price > TOOLI[b.id].price)) b = t; return b; }
+function bestInst(kind) { let b = null; for (const t of S.toolInv) if (t.dur > 0 && TOOLI[t.id].kind === kind && (!b || TOOLI[t.id].price > TOOLI[b.id].price)) b = t; return b; }
 function useTool(inst) {
   inst.dur--; dirty = true;
-  { const mx = TOOL_DUR[inst.id]; if (inst.dur === Math.ceil(mx * .2)) toast(`⚠ ${TOOLI[inst.id].name}の耐久が残り${inst.dur}。鍛冶屋で安く修理できる（壊れると無くなる）`, 3500); }
-  if (inst.dur <= 0) { S.toolInv = S.toolInv.filter(t => t !== inst); toast(`💥 ${TOOLI[inst.id].name}が壊れた……市場の「道具」で買い直そう。`, 3500); sfx('break'); syncBag(); }
+  { const mx = TOOL_DUR[inst.id]; if (inst.dur === Math.ceil(mx * .2)) toast(`⚠ ${TOOLI[inst.id].name}の耐久が残り${inst.dur}。鍛冶屋で安く修理できる`, 3500); }
+  if (inst.dur <= 0) { inst.dur = 0; toast(`💥 ${TOOLI[inst.id].name}が壊れた……使えないが、無くなりはしない。鍛冶屋ガルドで修理できる。`, 4000); sfx('break'); syncBag(); renderHot(); }
 }
 function syncBag() {
   if (!S.bag || S.bag.length !== BAG_N) { const b = Array(BAG_N).fill(null); (S.bag || []).slice(0, BAG_N).forEach((x, i) => b[i] = x); S.bag = b; }
@@ -1933,17 +1933,24 @@ function wishHTML() {
 const wishStar = ri => `<div class="btn" data-wl="${ri}" style="min-width:${U * 7}px;${wishL()[ri] ? 'color:#ffd860' : 'color:var(--sub)'}">${wishL()[ri] ? '★' : '☆'}</div>`;
 function ingChips(r, reveal) { const need = {}; r.ings.forEach(id => need[id] = (need[id] || 0) + 1);
   return Object.keys(need).map(id => `<span class="chipin ${haveIng(id) >= need[id] ? 'ok' : 'ng'}">${reveal ? ingName(id) : ingLabel(id)}${need[id] > 1 ? '×' + need[id] : ''}</span>`).join(''); }
+function cookBuyCost(r) { const c = {}; r.ings.forEach(id => c[id] = (c[id] || 0) + 1); let cost = 0; for (const id in c) { const l = c[id] - haveIng(id); if (l > 0) { if (ING[INGI[id]].src[0] !== 'market') return -1; cost += ING[INGI[id]].src[1] * l; } } return cost; }
 function renderCookBook() {
-  const list = REC.map((r, i) => i).filter(i => S.known.r[i] || S.learned[i]);
-  list.sort((a, b) => recipeAvail(REC[b]) - recipeAvail(REC[a]) || REC[b].value - REC[a].value);
+  const list = REC.map((r, i) => i).filter(i => S.known.r[i] || S.learned[i]), w = wishL();
+  list.sort((a, b) => (w[b] ? 1 : 0) - (w[a] ? 1 : 0) || recipeAvail(REC[b]) - recipeAvail(REC[a]) || REC[b].value - REC[a].value);
   const html = `<div class="seg"><div data-tab="free">自由に作る</div><div class="on" data-tab="book">レシピ帳 ${list.length}</div></div>
-    <div class="p">知っているレシピ。「材料をセット」で食材と調理法がそろう。レシピは市場の<b>本</b>・住民・ヒントで増える。</div>` +
-    list.map(ri => { const r = REC[ri], ok = recipeAvail(r), kn = S.known.r[ri];
-      return `<div class="row">${icHTML(r.icon, U * 11, 'atlas', null, 'r:' + ri)}<div class="t"><b>${r.name}${monTag('r' + ri)} ${kn ? mastStars('r' + ri) : '<span style="color:#8ad0c8;font-size:.8em">未調理</span>'}</b><span>${r.method}：${ingChips(r, true)}</span></div><div class="btn ${ok ? 'grn' : 'dis'}" data-set="${ri}">材料を<br>セット</div></div>`; }).join('');
+    <div class="p">知っているレシピ。「材料をセット」で食材と調理法がそろう。☆で作るリストに入り、上に並ぶ。</div><div class="itool"><input id="ckq" placeholder="🔍 料理名・食材名で探す" value="${(cook.q || '').replace(/"/g, '')}"></div>` +
+    list.map(ri => { const r = REC[ri], ok = recipeAvail(r), kn = S.known.r[ri], bc = ok ? -1 : cookBuyCost(r);
+      return `<div class="row" data-nm="${r.name}・${r.ings.map(ingName).join('・')}">${icHTML(r.icon, U * 11, 'atlas', null, 'r:' + ri)}<div class="t"><b>${r.name}${monTag('r' + ri)} ${kn ? mastStars('r' + ri) : '<span style="color:#8ad0c8;font-size:.8em">未調理</span>'}</b><span>${r.method}：${ingChips(r, true)}</span></div>${wishStar(ri)}${bc >= 0 ? `<div class="btn ${S.gold >= bc ? 'grn' : 'dis'}" data-bc="${ri}" style="font-size:.85em">買って作る<br>${fmt(bc)}G</div>` : `<div class="btn ${ok ? 'grn' : 'dis'}" data-set="${ri}">材料を<br>セット</div>`}</div>`; }).join('');
   modal('かまど', html, 'cook');
   bind('[data-tab]', d => { cook.tab = d.tab; renderCook(); });
   bind('[data-set]', d => { const r = REC[d.set]; cook.method = r.method; cook.slots = r.ings.map(id => ({id, g:false})); cook.tab = 'free'; sfx('tick'); renderCook(); });
+  bind('[data-wl]', d => { wishToggle(+d.wl); renderCook(); });
+  bind('[data-bc]', d => { const r = REC[d.bc], c = cookBuyCost(r); if (c < 0 || S.gold < c) return; const cnt = {}; r.ings.forEach(id => cnt[id] = (cnt[id] || 0) + 1); for (const id in cnt) { const l = cnt[id] - haveIng(id); if (l > 0) buyMarket(id, l); }
+    cook.method = r.method; cook.slots = r.ings.map(id => ({id, g:false})); cook.tab = 'free'; toast(`足りない材料を市場で買った（${fmt(c)}G）`); doCook(1); });
+  cookSearch('#ckq', '.row[data-nm]');
 }
+// かまどの名前検索（打つたびに絞り込む。画面は作り直さない）
+function cookSearch(inp, sel) { const e = document.querySelector(inp); if (!e) return; const f = () => { cook.q = e.value; const q = e.value.trim(); document.querySelectorAll(sel).forEach(x => x.style.display = !q || x.dataset.nm.includes(q) ? '' : 'none'); }; e.oninput = f; f(); }
 function cookKey() { return cook.method + '|' + cook.slots.map(s => s.id).sort().join(','); }
 function renderCook() {
   if (cook.tab === 'book') return renderCookBook();
@@ -1962,7 +1969,7 @@ function renderCook() {
    <div style="display:flex;gap:${U * 1.5}px;margin-bottom:${U * 2}px">
      <div class="btn big ${cook.slots.length && maxN > 0 ? '' : 'dis'}" data-n="1" style="flex:1">作る ×1</div>
      <div class="btn big ${cook.slots.length && maxN > 1 ? '' : 'dis'}" data-n="${Math.min(maxN, 10)}" style="flex:1">まとめて ×${Math.max(1, Math.min(maxN, 10))}</div></div>
-   <div class="grid">${items.map(it => `<div class="cell ${it.g ? 'gold' : ''} ${it.n - used(it.id, it.g) <= 0 ? 'dim' : ''}" data-id="${it.id}" data-g="${it.g ? 1 : 0}">${ingIc(it.id, U * 13, it.g)}<span class="n">${it.n - used(it.id, it.g)}</span></div>`).join('') || '<div class="p">食材がない。農場や市場で手に入れよう。</div>'}</div>
+   <div class="itool"><input id="ckq2" placeholder="🔍 食材名で探す" value="${(cook.q || '').replace(/"/g, '')}"></div><div class="grid">${items.map(it => `<div class="cell ${it.g ? 'gold' : ''} ${it.n - used(it.id, it.g) <= 0 ? 'dim' : ''}" data-nm="${ingName(it.id)}" data-id="${it.id}" data-g="${it.g ? 1 : 0}">${ingIc(it.id, U * 13, it.g)}<span class="n">${it.n - used(it.id, it.g)}</span></div>`).join('') || '<div class="p">食材がない。農場や市場で手に入れよう。</div>'}</div>
    <div class="p">金色の食材を使うと、金色の料理（売値3倍）ができる。</div>`;
   modal('かまど', html, 'cook');
   bind('[data-tr]', () => openTrial());
@@ -1971,6 +1978,7 @@ function renderCook() {
   bind('.slot', d => { cook.slots.splice(+d.i, 1); renderCook(); });
   bind('.cell', d => { const g = d.g === '1'; const have = haveIng(d.id, g); if (cook.slots.length >= 4 || have - used(d.id, g) <= 0) return; cook.slots.push({id:d.id, g}); renderCook(); });
   bind('[data-n]', d => doCook(+d.n));
+  cookSearch('#ckq2', '.cell[data-nm]');
 }
 function doCook(n) {
   if (!cook.slots.length) return;
@@ -2134,7 +2142,7 @@ function invCells() {
   else {
     for (const id in S.inv) if (isOthIng(id) && id !== 'tmap') c.push({k:'i', id, g:false, n:S.inv[id]}); for (const id in S.invG) if (isOthIng(id) && id !== 'tmap') c.push({k:'i', id, g:true, n:S.invG[id]});
     for (const id in S.seeds) c.push({k:'s', id, g:false, n:S.seeds[id]});
-    const inBag = new Set(S.bag.filter(x => x && x.k === 't').map(x => x.uid)); for (const t of S.toolInv) if (!inBag.has(t.uid)) c.push({k:'t', id:t.uid, g:false, n:1});
+    const inBag = new Set(S.bag.filter(x => x && x.k === 't').map(x => x.uid)); for (const t of S.toolInv) if (t.dur > 0 && !inBag.has(t.uid)) c.push({k:'t', id:t.uid, g:false, n:1});
     if (S.gear) for (const g of gearSt().list) c.push({k:'gear', id:g.uid, g:false, n:1, r:g.r});
     if (S.tmap && S.tmap.maps.length) c.push({k:'map', id:'tmap', g:false, n:S.tmap.maps.length});
   }
@@ -2462,10 +2470,10 @@ function openDex() {
   else if (dexTab === 'kiwa') body = kiwaHTML();
   else if (dexTab === 'mon') body = monDexHTML();
   else if (dexTab === 'gear') body = gearDexHTML();
-  else if (dexTab === 'fish') { const R_ = S.fishRec || {}, secs = [['生簀', POND], ['桟橋', PIER.filter(g => FSZ[g.id] && !['shrimp','scallop'].includes(g.id))], ['地底湖', LAKE.map(id => ING[INGI[id]])], ['ヌシ', ['nushi_pond','nushi_pier','nushi_lake'].map(id => ING[INGI[id]])]];
+  else if (dexTab === 'fish') { tut('m_fishcond'); const R_ = S.fishRec || {}, secs = [['生簀', POND], ['桟橋', PIER.filter(g => FSZ[g.id] && !['shrimp','scallop'].includes(g.id))], ['地底湖', LAKE.map(id => ING[INGI[id]])], ['ヌシ', ['nushi_pond','nushi_pier','nushi_lake'].map(id => ING[INGI[id]])]];
     const all = secs.flatMap(x => x[1]), nC = all.filter(g => R_[g.id]).length;
     body = `<div class="p">釣った魚の最大サイズ。★は小・中・大のサイズ段階（初めての段階で報酬）。${nC}/${all.length}</div>` + secs.map(([n, list]) => `<div class="h">${n}</div>` + list.map(g => { const r = R_[g.id], hint = g.src[0] === 'nushi' ? NUSHI[g.src[1]].hint : (TACKLE.find(t => t.fav[g.id]) || {}).n;
-      return `<div class="row">${icHTML(g.icon, U * 11, r ? 'atlas' : 'sil', null, 'i:' + g.id)}<div class="t"><b>${r ? g.name : '？？？'}</b><span>${r ? `最大 ${r.max.toFixed(1)}cm　${[1, 2, 3].map(k => r.st & (1 << (k - 1)) ? '★' : '☆').join('')}` : 'ヒント：' + (hint || '遠投') }</span></div></div>`; }).join('')).join(''); }
+      return `<div class="row">${icHTML(g.icon, U * 11, r ? 'atlas' : 'sil', null, 'i:' + g.id)}<div class="t"><b>${r ? g.name : g.src[0] !== 'nushi' && ingObtainable(g.id) ? g.name + ' <span style="color:var(--sub);font-weight:normal">まだ釣っていない</span>' : '？？？'}</b><span>${r ? `最大 ${r.max.toFixed(1)}cm　${[1, 2, 3].map(k => r.st & (1 << (k - 1)) ? '★' : '☆').join('')}<br>` : ''}${fishCond(g)}</span></div></div>`; }).join('')).join(''); }
   else body = `<div class="grid">${ING.map((g, i) => isItem(g.id) ? '' : `<div class="cell" data-i="${i}">${ingIc(g.id, U * 13)}</div>`).join('')}</div>`;
   compCheck();
   modal('図鑑', `${compRateHTML()}<div class="seg many"><div class="${dexTab === 'dish' ? 'on' : ''}" data-t="dish">料理 ${nR}/${REC.length}</div><div class="${dexTab === 'ing' ? 'on' : ''}" data-t="ing">食材 ${nI}/${ING.filter(g => !isItem(g.id)).length}</div>${unl('machines') ? `<div class="${dexTab === 'proc' ? 'on' : ''}" data-t="proc">加工品</div>` : ''}${unl('mine') ? `<div class="${dexTab === 'ore' ? 'on' : ''}" data-t="ore">鉱石</div>` : ''}${unl('fishing') ? `<div class="${dexTab === 'fish' ? 'on' : ''}" data-t="fish">釣り</div>` : ''}${unl('regulars') ? `<div class="${dexTab === 'reg' ? 'on' : ''}" data-t="reg">常連</div>` : ''}${unl('story') ? `<div class="${dexTab === 'diary' ? 'on' : ''}" data-t="diary">日記</div>` : ''}${unl('kiwami') ? `<div class="${dexTab === 'kiwa' ? 'on' : ''}" data-t="kiwa">極み</div>` : ''}${unl('guild') ? `<div class="${dexTab === 'mon' ? 'on' : ''}" data-t="mon">魔物</div>` : ''}${unl('arms') ? `<div class="${dexTab === 'gear' ? 'on' : ''}" data-t="gear">装備</div>` : ''}${unl('ach') ? `<div class="${dexTab === 'ach' ? 'on' : ''}" data-t="ach">実績</div>` : ''}</div>${body}`, 'dex');
@@ -2581,30 +2589,62 @@ function allIngsAll() {
   for (const id in S.inv) m[id] = 1; for (const sl of S.bag) if (sl && sl.k === 'i' && !sl.g) m[sl.id] = 1;
   return Object.keys(m).map(id => ({id, n:haveIng(id)})).filter(x => x.n > 0).sort((a, b) => INGI[a.id] - INGI[b.id]);
 }
+let mkN = 1;
 function openMarket() {
+  if (mkTab === 'fish') return openFishMarket();
   if (mkTab === 'sell') return openSell();
   if (mkTab === 'trade') return openTrade();
   if (mkTab === 'tool') return openTools();
   if (mkTab === 'book') return openBooks();
   const need = wishNeed(), wn = g => mkTab === 'seed' ? wishSeedNeed(g.id) : (need[g.id] ? Math.max(0, need[g.id] - haveAnyIng(g.id)) : -1);
   const list = (mkTab === 'seed' ? SEEDS.filter(g => (!FANTASY.has(g.id) || S.fac.greenhouse) && !HYBS.has(g.id)) : MARKET).slice().sort((a, b) => (need[b.id] ? 1 : 0) - (need[a.id] ? 1 : 0));
-  const html = mkSeg() +
+  const short = mkTab === 'food' ? Object.keys(need).filter(id => ING[INGI[id]].src[0] === 'market' && haveAnyIng(id) < need[id]).map(id => [id, need[id] - haveAnyIng(id)]) : [];
+  const shortC = short.reduce((a, [id, n]) => a + ING[INGI[id]].src[1] * n, 0);
+  const html = mkSeg() + mkNHTML() +
+    (short.length ? `<div class="btn big ${S.gold >= shortC ? 'grn' : 'dis'}" data-wbuy="1" style="margin-bottom:${U * 1.4}px">📝 作るリストの足りない分をまとめて買う（${short.map(([id, n]) => ingName(id) + '×' + n).join('・')}　${fmt(shortC)}G）</div>` : '') +
     (mkTab === 'seed' && !S.fac.greenhouse ? '<div class="p">温室を建てると、幻想の作物の種も並ぶ。</div>' : '') +
     list.map(g => { const p = g.src[1]; const own = mkTab === 'seed' ? (S.seeds[g.id] || 0) : (S.inv[g.id] || 0);
       const shown = isKnown(g.id) || (mkTab === 'seed' && S.seeds[g.id]);
-      return `<div class="row">${ingIc(g.id, U * 11, false, shown)}<div class="t"><b>${need[g.id] ? '<i style="font-style:normal;color:#ffd860">★ </i>' : ''}${g.name}${mkTab === 'seed' ? 'の種' : ''}</b><span>${p}G　所持 ${own}${need[g.id] ? `　<span style="color:${wn(g) > 0 ? '#ffd860' : '#8ad08a'}">作るリスト：${wn(g) > 0 ? 'あと' + wn(g) + '個' : 'そろった'}（必要${need[g.id]}・手持ち${haveAnyIng(g.id)}・料理人は使わない）</span>` : ''}${shown ? '' : '　<span style="color:#e8c060">まだ使ったことがない</span>'}</span></div><div class="btn ${S.gold >= p ? '' : 'dis'}" data-id="${g.id}" data-n="1">×1</div><div class="btn ${S.gold >= p * 5 ? '' : 'dis'}" data-id="${g.id}" data-n="5">×5</div></div>`; }).join('');
+      return `<div class="row">${ingIc(g.id, U * 11, false, shown)}<div class="t"><b>${need[g.id] ? '<i style="font-style:normal;color:#ffd860">★ </i>' : ''}${g.name}${mkTab === 'seed' ? 'の種' : ''}</b><span>${p}G　所持 ${own}${need[g.id] ? `　<span style="color:${wn(g) > 0 ? '#ffd860' : '#8ad08a'}">作るリスト：${wn(g) > 0 ? 'あと' + wn(g) + '個' : 'そろった'}（必要${need[g.id]}・手持ち${haveAnyIng(g.id)}・料理人は使わない）</span>` : ''}${shown ? '' : '　<span style="color:#e8c060">まだ使ったことがない</span>'}</span></div><div class="btn ${S.gold >= p * mkN ? '' : 'dis'}" data-id="${g.id}" data-n="${mkN}">×${mkN}<br>${fmt(p * mkN)}G</div></div>`; }).join('');
   modal('霧月通りの市場', html, 'market');
   bind('[data-t]', d => { mkTab = d.t; openMarket(); });
   bind('.btn[data-id]', d => {
     const g = ING[INGI[d.id]], n = +d.n, c = g.src[1] * n; if (S.gold < c) return;
-    S.gold -= c; add(mkTab === 'seed' ? S.seeds : S.inv, d.id, n); if (mkTab !== 'seed') S.known.i[d.id] = true; openMarket();
+    S.gold -= c; add(mkTab === 'seed' ? S.seeds : S.inv, d.id, n); if (mkTab !== 'seed') S.known.i[d.id] = true; sfx('coin'); openMarket();
   });
+  bindMkN(openMarket);
+  bind('[data-wbuy]', () => { if (S.gold < shortC) return; for (const [id, n] of short) buyMarket(id, n); sfx('coin'); toast('作るリストの足りない食材をまとめて買った（倉庫へ）'); openMarket(); });
+}
+// 買う数（−＋と、1・5・10）
+function mkNHTML() { return `<div style="display:flex;align-items:center;gap:${U * .8}px;margin-bottom:${U * 1.4}px;flex-wrap:wrap"><span>買う数</span><div class="btn" data-mn="-1">−</div><b style="min-width:${U * 8}px;text-align:center;font-size:1.2em">${mkN}</b><div class="btn" data-mn="1">＋</div>${[1, 5, 10, 20].map(n => `<div class="btn ${mkN === n ? 'grn' : ''}" data-ms="${n}">${n}</div>`).join('')}</div>`; }
+function bindMkN(re) { bind('[data-mn]', d => { mkN = Math.max(1, Math.min(99, mkN + +d.mn)); re(); }); bind('[data-ms]', d => { mkN = +d.ms; re(); }); }
+
+// v0.54 朝の魚市（6〜10時）：日替わりで魚・貝・エビなどが5品。値打ち×1.5（釣るほうが安い）
+const FM_POOL = ['ayu','trout','catfish','eel','carp','smelt','aji','saba','salmon','tai','tuna','squid','shrimp','octopus','scallop','iwashi','sanma','buri','hirame','katsuo','uni','asari','crab','oyster','sazae','wakame','river_shrimp','sawagani'].filter(id => INGI[id] != null);
+const FM_RARE = ['misteel','abyssfish'].filter(id => INGI[id] != null);
+const fmOpen = () => { const h = hmNow(); return h >= 360 && h < 600; };
+function fmStock() {
+  if (S.fm && S.fm.d === gday()) return S.fm;
+  const w = id => { const g = ING[INGI[id]]; return typeof g.src[1] === 'number' ? g.src[1] : 15; };
+  const pool = FM_POOL.slice(), it = [];
+  while (it.length < 5 && pool.length) { const tot = pool.reduce((a, id) => a + w(id) * (inSeason(id) ? 1.8 : 1), 0); let r = Math.random() * tot, k = 0; for (; k < pool.length - 1; k++) { r -= w(pool[k]) * (inSeason(pool[k]) ? 1.8 : 1); if (r <= 0) break; } const id = pool.splice(k, 1)[0]; it.push({id, n:2 + Math.floor(Math.random() * 4)}); }
+  if (FM_RARE.length && Math.random() < .12) it.push({id:pick(FM_RARE), n:1, rare:1});
+  return (S.fm = {d:gday(), it});
+}
+function openFishMarket() {
+  tut('m_fishmk'); const st = fmStock(), open = fmOpen();
+  const html = mkSeg() + `<div class="p">🐟 朝の魚市：毎朝6時〜10時だけ。日替わりで魚・貝・エビなどが並ぶ（値打ちの1.5倍。自分で釣るほうが安い）。</div>` + (open ? mkNHTML() + st.it.map((x, i) => { const g = ING[INGI[x.id]], p = Math.round(g.value * 1.5), m = Math.min(mkN, x.n);
+    return `<div class="row">${ingIc(x.id, U * 11, false, true)}<div class="t"><b>${x.rare ? '<i style="font-style:normal;color:#e8c060">珍 </i>' : ''}${g.name}${inSeason(x.id) ? ' <span style="color:#8ad08a;font-weight:normal">旬</span>' : ''}</b><span>${p}G　残り${x.n}　所持 ${haveAnyIng(x.id)}</span></div><div class="btn ${x.n > 0 && S.gold >= p * m ? '' : 'dis'}" data-fm="${i}">×${m}<br>${fmt(p * m)}G</div></div>`; }).join('')
+    : `<div class="p" style="color:#d8806a">今は閉まっている。明日の朝6時に、また新しい魚が並ぶ。</div>`);
+  modal('霧月通りの市場', html, 'market');
+  bind('[data-t]', d => { mkTab = d.t; openMarket(); }); bindMkN(openFishMarket);
+  bind('[data-fm]', d => { if (!fmOpen()) return openFishMarket(); const x = st.it[+d.fm], g = ING[INGI[x.id]], p = Math.round(g.value * 1.5), m = Math.min(mkN, x.n); if (!m || S.gold < p * m) return; S.gold -= p * m; x.n -= m; add(S.inv, x.id, m); S.known.i[x.id] = true; sfx('coin'); dirty = true; openFishMarket(); });
 }
 
-function mkSeg() { return `<div class="seg">${[['seed','種'],['food','食材'],['tool','道具'],['book','本'],['sell','買取'],['trade','相場']].filter(x => (x[0] !== 'sell' || unl('mine')) && (x[0] !== 'trade' || unl('trade'))).map(([k, n]) => `<div class="${mkTab === k ? 'on' : ''}" data-t="${k}">${n}</div>`).join('')}</div>`; }
+function mkSeg() { return `<div class="seg">${[['seed','種'],['food','食材'],['fish','🐟魚市'],['tool','道具'],['book','本'],['sell','買取'],['trade','相場']].filter(x => (x[0] !== 'fish' || unl('fishing')) && (x[0] !== 'sell' || unl('mine')) && (x[0] !== 'trade' || unl('trade'))).map(([k, n]) => `<div class="${mkTab === k ? 'on' : ''}" data-t="${k}">${n}</div>`).join('')}</div>`; }
 const MK_POTS = ['p_heal', 'p_heal2', 'p_stam'];
 function openTools() {
-  let html = mkSeg() + '<div class="p">道具には耐久力がある。使うたびに減り、0になると壊れて無くなる。ここでの修理は新品の半額×減った分。<b>鍛冶屋ガルド（古井戸の下の小屋・施設タブ）なら、その4割の値段で修理できる。</b></div>';
+  let html = mkSeg() + '<div class="p">道具には耐久力がある。使うたびに減り、0になると壊れて使えなくなる（無くならない）。ここでの修理は新品の半額×減った分。<b>鍛冶屋ガルド（古井戸の下の小屋・施設タブ）なら、その4割の値段で修理できる。</b></div>';
   if (S.toolInv.length) {
     html += '<div class="h">持っている道具</div>';
     for (const t of S.toolInv) { const tl = TOOLI[t.id], mx = TOOL_DUR[t.id], c = Math.max(1, Math.round(tl.price * .5 * (1 - t.dur / mx))) || 0, r = t.dur / mx;
@@ -2635,7 +2675,7 @@ function openTools() {
   bind('[data-tk]', d => { const t = TKI[d.tk], c = t.price * (t.pack || 1); if (S.gold < c) return; S.gold -= c; S.tackle[t.id] = tkHave(t.id) + (t.bait ? t.pack : t.uses); if (!S.tkSel) S.tkSel = t.id; dirty = true; sfx('coin'); openTools(); });
   bind('[data-bpot]', d => { const [id, n] = d.bpot.split(':'), c = ING[INGI[id]].value * 3 * +n; if (S.gold < c) return; S.gold -= c; add(S.inv, id, +n); S.known.i[id] = true; sfx('coin'); toast(`${ingName(id)}×${n}を買った（倉庫へ。迷宮では画面上の「🧪薬」から使う）`); openTools(); });
   bind('[data-scroll]', () => { if (S.gold < 120) return; S.gold -= 120; giveBag('i', 'scroll', false, 1); sfx('coin'); openTools(); });
-  bind('[data-rep]', d => { const t = S.toolInv.find(x => x.uid === +d.rep), tl = TOOLI[t.id], c = Math.max(1, Math.round(tl.price * .5 * (1 - t.dur / TOOL_DUR[t.id]))); if (S.gold < c) return; S.gold -= c; t.dur = TOOL_DUR[t.id]; renderHot(); dirty = true; openTools(); });
+  bind('[data-rep]', d => { const t = S.toolInv.find(x => x.uid === +d.rep), tl = TOOLI[t.id], c = Math.max(1, Math.round(tl.price * .5 * (1 - t.dur / TOOL_DUR[t.id]))); if (S.gold < c) return; S.gold -= c; t.dur = TOOL_DUR[t.id]; if (!S.bag.some(x => x && x.k === 't' && x.uid === t.uid)) giveTool(t.uid); renderHot(); dirty = true; openTools(); });
 }
 // ---------- tooltips (long press)
 let tipEl = null, tipTimer = null, tipStart = null, tipShownAt = 0, tipEat = false;
@@ -2703,6 +2743,14 @@ const isNight = () => hmNow() >= 1140 || hmNow() < 300;
 function tkIcon(id, px) { const t = TKI[id], sc = px / 16; return `<div class="ic" style="width:${px}px;height:${px}px;background-image:url(${URL_.tackle});background-size:${128 * sc}px ${px}px;background-position:-${t.i * px}px 0"></div>`; }
 const tkHave = id => (S.tackle || {})[id] || 0;
 function fishList(loc) { return loc === 'lake' ? LAKE.map(id => ING[INGI[id]]) : loc === 'pond' ? POND : PIER; }
+// v0.54：図鑑に釣れる条件（場所・珍しさ・旬・合うエサ・霧と夜）
+function fishCond(g) {
+  if (g.src[0] === 'nushi') return 'ヒント：' + NUSHI[g.src[1]].hint + '　幻の疑似餌で掛かりやすい';
+  const loc = {pond:'農場の生簀', pier:'桟橋', lake:'地底湖（迷宮）'}[g.src[0]] || '釣り', w = g.src[1], rare = typeof w === 'number' ? (w <= 3 ? '幻' : w <= 8 ? '珍しい' : w <= 15 ? 'やや珍しい' : 'よく釣れる') : '';
+  const tk = TACKLE.filter(t => t.fav[g.id]).sort((a, b) => b.fav[g.id] - a.fav[g.id]).map(t => t.n + '×' + t.fav[g.id]);
+  const st = SEASON_OF[g.id] && unl('season') ? '旬：' + SEASON_OF[g.id].map(x => SEASONS[x].n).join('・') + (inSeason(g.id) ? '（今！）' : '') + '（旬は1.8倍）' : '';
+  return [loc + (rare ? '・' + rare : ''), tk.length ? '合うエサ：' + tk.join('・') : '', st, typeof w === 'number' && w <= 10 ? '霧・夜・良い竿・生簀の強化で出やすい' : '', RARE_FISH.has(g.id) ? '最上級の竿か、光る虫・深海用ジグが必要' : ''].filter(Boolean).join('<br>');
+}
 function fishPool(f) {
   const tk = TKI[S.tkSel], fog = (evOn('fog') ? 3 : 1) * (wxOn('fog') ? 2 : 1) * (isNight() ? 1.3 : 1), rare = f.rod.rare;
   return fishList(f.loc).filter(g => !RARE_FISH.has(g.id) || f.rod.id === 'rod4' || (tk && (tk.id === 'glow' || tk.id === 'jig')))
@@ -3057,11 +3105,13 @@ const TUT = {
   m_staff:['従業員', '雇うと留守中も仕事をしてくれる（最大8時間分）。<br>料理人は覚えたレシピを作り、店員は自動で棚に並べて売る。'],
   m_orders:['依頼の掲示板', '住民の注文。<b>①書いてある料理を作る</b>（まだ作ったことがない料理は、名前・調理法・材料の数・材料1つがヒント。残りの材料はかまどで試して探す）<br><b>②棚に並べずに「届ける」</b>。作った直後の「できあがり」画面からも届けられる。棚に並べるとお客さんが買ってしまうので注意。<br>作れそうにない依頼は、1日1回「入れ替え」できる。<br>宴会の予約・評論家の記事・料理コンテストもここで見られる。'],
   m_forgehut:['鍛冶小屋', '古井戸の下に、ガルドの鍛冶小屋ができた。<br>小屋をタップすると、いつでも鍛冶（ツルハシ・武器・防具・付与・器）ができる。<br>「施設」タブの「⚒ 鍛冶屋ガルド」からも開ける。'],
+  m_fishmk:['朝の魚市', '市場に「🐟魚市」の札ができた。毎朝6時〜10時だけ開き、日替わりで魚・貝・エビなどが5品並ぶ（ときどき珍しい魚も）。<br>値段は値打ちの1.5倍。狙った魚が釣れない時に。'],
+  m_fishcond:['釣れる条件', '魚の図鑑に、釣れる場所・珍しさ・合うエサ（×は掛かりやすさ）・旬が出る。<br>珍しい魚は、霧の日・夜・良い竿・生簀の強化で出やすくなる。'],
   m_plv:['主人公のレベル', '迷宮やダンジョンで魔物を倒す・岩を砕くと経験がたまり、主人公のレベルが上がる。<br>Lvが1上がるごとに、最大体力+5・最大気力+4（最大Lv50）。迷宮の上の帯に今のLvが出る。'],
   m_plate:['初めての味', '迷宮の「食べる」で、まだ食べたことのない料理を食べると、最大体力+1（2品ごとに最大気力も+1）。100品まで。<br>食べる画面で「✨初めて」と出ている料理が対象。'],
   m_scroll:['帰還の巻物', '使うとすぐ地上（ダンジョンなら町）へ戻る。<br>①帰り道のおまけで、その回に拾った物が2割増える<br>②「帰還の印」が残り、次は入口から「その階から再開」を選べる（1回だけ）<br>③持っていれば、倒れそうな時に自動で使われ、何も失わない'],
   m_up:['上の階へ戻る', '降りてきたはしご（画面の上）から、上の階へ戻れる。<br>戻った階は、壊した岩も倒した魔物もそのまま（復活しない）。<br>ツルハシが壊れたときも、はしごを登って地上へ帰れる。'],
-  m_wish:['作るリスト', '☆を押したレシピが「作るリスト」に入る。何品でも入れられ、＋−で皿数も決められる。<br>市場では、必要な食材に★がつき、「あと何個」「必要・手持ち」が出る（★の食材は一覧の上に並ぶ）。<br>レシピ帳のいちばん上で、そろった材料と足りない食材の合計が見られる。<br><b>作るリストの材料は、料理人が倉庫から使わずに取っておく。</b>自分で作るたびに皿数が減り、0になるとリストから外れる。'],
+  m_wish:['作るリスト', '☆を押したレシピが「作るリスト」に入る。何品でも入れられ、＋−で皿数も決められる。<br>市場では、必要な食材に★がつき、「あと何個」「必要・手持ち」が出る（★の食材は一覧の上に並ぶ）。<br>レシピ帳のいちばん上で、そろった材料と足りない食材の合計が見られる。<br>かまどのレシピ帳でも☆を押せて、☆のレシピは上に並ぶ。<br><b>作るリストの材料は、料理人が倉庫から使わずに取っておく。</b>自分で作るたびに皿数が減り、0になるとリストから外れる。'],
   m_rec:['レシピ帳', '覚えたレシピと、作ったことのあるレシピ。<br>本を買うか、住民や常連客と仲良くなると増える。'],
   m_dex:['図鑑', '料理・食材・加工品・鉱石・釣り・常連客の記録。<br>未発見のものはシルエットで表示される。'],
   m_forge:['鍛冶屋ガルド', 'ツルハシと剣を、鉱石を使って1段階上に作り直せる。<br>宝石で器も作れる（棚に置くと料理の価値が上がる）。'],
@@ -4904,7 +4954,7 @@ const MAN = [
     '種は外の市場（広場の左）の「種」で買う。農夫を雇うと、実った作物を収穫して同じ種を植え直してくれる。',
     '畑の区画・スプリンクラー（自動で水やり）・温室（珍しい種）・たい肥箱（肥料）は「施設」タブから。'])
     + tbl(['種', '値段', '育つ時間'], SEEDS.filter(g => !FANTASY.has(g.id) && !HYBS.has(g.id)).slice(0, 40).map(g => [g.name, g.src[1] + 'G', secT(g.src[2])]))},
-  {k:'cook', t:'料理とレシピ', c:() => true, h:() => li([
+  {k:'cook', t:'料理とレシピ', c:() => true, h:() => li(['かまどの「🔍」で、食材（自由に作る）や料理名・食材名（レシピ帳）を探せる。', 'レシピ帳で材料が足りなくても、足りない物が全部市場の物なら「買って作る ○G」で一度に作れる。', 
     'かまど（店内の厨房）で、食材を1〜4つと調理法（焼く・煮る・揚げる・蒸す・炊く・生）を選ぶ。合っていればレシピ発見。',
     '外れても「惜しい！」なら、食材が多い・足りない・1つ違う、と合っている食材を1つ教えてくれる。',
     'レシピタブで「ヒント」を買うと、未発見のレシピの食材がわかる（続けて買うと同じレシピの食材がもう1つ。100G→160G→220G…）。',
@@ -4918,10 +4968,11 @@ const MAN = [
     '店員を雇うと「自動販売」ができる。値付けの方針（安め・通常・強気）を選べる。',
     '店の格（屋台級→町の食堂→評判の店→名店→伝説の宵闇亭）は評判と売った皿数で上がり、客が増えて高い物も買われるようになる。',
     '評判は高くなるほど上がりにくい。'])},
+  {k:'fishmk', t:'朝の魚市', c:() => unl('fishing'), h:() => li(['市場の「🐟魚市」。毎朝6時〜10時だけ開く。', '日替わりで魚・貝・エビ・海藻などが5品、それぞれ2〜5個（12%で霧ウナギや奈落魚などの珍しい魚が1つ）。旬の物が並びやすい。', '値段は値打ちの1.5倍（釣るほうが安い）。上の「買う数」で個数を決める。', '魚の図鑑には、釣れる場所・珍しさ・合うエサ・旬が出る。'])},
   {k:'plgrow', t:'主人公の成長', c:() => unl('mine'), h:() => li(['<b>レベル</b>：迷宮・ダンジョンで魔物を倒す（深いほど多い、ボスは60）・岩を砕く（1）と経験。次のLvまで 40×今のLv。Lvごとに最大体力+5・最大気力+4、最大Lv50。今 Lv' + plSt().lv + '（' + plSt().xp + '/' + plNeed(plSt().lv) + '）', '<b>初めての味</b>：迷宮の「食べる」で初めて食べる料理ごとに最大体力+1、2品ごとに最大気力+1（100品まで。今 ' + plSt().an + '品）', 'ほかに：新しい層に初めて着く（体力+15×5）・公衆浴場（体力と気力+20）・究極の料理・老騎士バルド♥4'])},
   {k:'scroll', t:'帰還の巻物', c:() => unl('mine'), h:() => li(['市場の「道具」で120G。迷宮の上の「📜」で使う。', '帰り道のおまけ：その回に拾った物が2割増える。', '帰還の印：次は迷宮の入口（専用ダンジョンの入口）で「その階から再開」を選べる（1回だけ、昇降機のない階でも）。', '持っていれば、倒れそうな時に自動で使われ、拾った物を失わない（エリクサーより先）。'])},
   {k:'forgehut', t:'鍛冶小屋', c:() => true, h:() => li(['古井戸（地下迷宮の入口）の下に、鍛冶屋ガルドの小屋がある。タップで鍛冶の画面。', '「施設」タブのいちばん上の「⚒ 鍛冶屋ガルド」からも、どこにいても開ける。', 'できること：ツルハシの強化・<b>道具の修理（市場の4割の値段）</b>・武器を作る・付与・防具・宝石の器・鍛え直し（解放した物だけ）。', '出張販売の屋台は、広場の左下に移った。'])},
-  {k:'wish', t:'作るリスト', c:() => true, h:() => li(['レシピ帳で、レシピの右の☆を押すと「作るリスト」に入る（もう一度押すと外れる）。何品でも入れられる。', 'レシピ帳のいちばん上に作るリスト：＋−で皿数、✕で外す。食材ごとに「手持ち/必要」、材料がそろうと「材料そろった」。', '市場の「食材」「種」では、作るリストに必要な食材に★がつき、一覧の上に並ぶ。「あと○個（必要・手持ち）」も出る。', '作るリストに必要な数の食材は、料理人が倉庫から使わない（取り置き）。足りない分は、料理人が自分で市場から買う。自分で作るたびにリストの皿数が1減り、0で外れる。'])},
+  {k:'wish', t:'作るリスト', c:() => true, h:() => li(['レシピ帳で、レシピの右の☆を押すと「作るリスト」に入る（もう一度押すと外れる）。何品でも入れられる。', 'レシピ帳のいちばん上に作るリスト：＋−で皿数、✕で外す。食材ごとに「手持ち/必要」、材料がそろうと「材料そろった」。', '市場の「食材」「種」では、作るリストに必要な食材に★がつき、一覧の上に並ぶ。「あと○個（必要・手持ち）」も出る。', 'かまどのレシピ帳でも☆を押せる。☆のレシピはレシピ帳のいちばん上に並ぶ。', '市場の「作るリストの足りない分をまとめて買う」で、足りない食材を一度に買える。', '作るリストに必要な数の食材は、料理人が倉庫から使わない（取り置き）。足りない分は、料理人が自分で市場から買う。自分で作るたびにリストの皿数が1減り、0で外れる。'])},
   {k:'orders', t:'依頼の掲示板', c:() => unl('orders'), h:() => li(['店の外（広場の右上）の掲示板に、料理の注文が貼られる。期限までに届けるとお金と評判。', 'まだ作ったことがない料理は、名前・調理法・材料の数・材料1つがヒントとして書いてある（残りはかまどで試して探す）。依頼に出るのは、いま手に入る材料で作れる料理だけ。', '倉庫・カバン・棚のどこにある料理でも届けられる。ただし棚に並べるとお客さんが買ってしまう。作った直後の「できあがり」画面の「📜 依頼に届ける」が確実。', '作れそうにない依頼は、1日1回「入れ替え」できる。', '宴会の予約（たくさんの皿）が入ることもある。暦にも載る。'])},
   {k:'staff', t:'従業員', c:() => unl('staff'), h:() => li(Object.values(STAFF).map(s => `<b>${s.name}</b>：${s.desc}（最大${s.max}人）`).concat([
     '従業員は働くとLvが上がり、速くなる。Lv5とLv10で得意技を1つ選べる。',
@@ -5118,7 +5169,7 @@ const MAN = [
 ];
 let manSel = 'flow';
 const MAN_CAT = [['基本', ['flow', 'ctrl', 'cook', 'wish', 'forgehut', 'shop', 'orders', 'fac', 'xfer', 'src']], ['店', ['staff', 'reg', 'critic', 'decor', 'night', 'expand', 'town', 'money', 'contest', 'cellar', 'rival', 'fame', 'kiwami', 'airec', 'stall', 'merchant']],
-  ['農・釣り', ['farm', 'ranch', 'mach', 'breed', 'fish', 'forage', 'season', 'quality']], ['冒険', ['mine', 'plgrow', 'scroll', 'monster', 'story', 'guild', 'arms', 'dungeon', 'secrets', 'abyss', 'tower']],
+  ['農・釣り', ['farm', 'ranch', 'mach', 'breed', 'fish', 'fishmk', 'forage', 'season', 'quality']], ['冒険', ['mine', 'plgrow', 'scroll', 'monster', 'story', 'guild', 'arms', 'dungeon', 'secrets', 'abyss', 'tower']],
   ['町・遠征', ['expedition', 'desert', 'tea', 'capital', 'isle', 'caravan', 'mirror']], ['やり込み', []]];
 const manCatOf = k => (MAN_CAT.find(c => c[1].includes(k)) || MAN_CAT[MAN_CAT.length - 1])[0];
 let manCat = '基本', manQ = '';
@@ -5630,12 +5681,12 @@ const repairCost = t => { const tl = TOOLI[t.id], mx = TOOL_DUR[t.id]; return t.
 function forgeRepairHTML() {
   const ts = S.toolInv.filter(t => t.dur < TOOL_DUR[t.id]); const all = ts.reduce((a, t) => a + repairCost(t), 0);
   return `<div class="h">⚒ 修理（市場の修理の4割の値段）</div>` + (ts.length ? ts.map(t => { const tl = TOOLI[t.id], mx = TOOL_DUR[t.id], c = repairCost(t);
-    return `<div class="row">${icHTML(tl.icon, U * 10, 'atlas', null, 't:' + tl.id)}<div class="t"><b>${tl.name}</b><span>耐久 ${t.dur}/${mx}　新品 ${fmt(tl.price || 80)}G</span></div><div class="btn ${S.gold >= c ? 'grn' : 'dis'}" data-fr="${t.uid}">${fmt(c)}G</div></div>`; }).join('')
+    return `<div class="row">${icHTML(tl.icon, U * 10, 'atlas', null, 't:' + tl.id)}<div class="t"><b>${tl.name}${t.dur <= 0 ? ' <span style="color:#e88">💥壊れている</span>' : ''}</b><span>耐久 ${t.dur}/${mx}　新品 ${fmt(tl.price || 80)}G</span></div><div class="btn ${S.gold >= c ? 'grn' : 'dis'}" data-fr="${t.uid}">${fmt(c)}G</div></div>`; }).join('')
     + (ts.length > 1 ? `<div class="btn big ${S.gold >= all ? 'grn' : 'dis'}" data-fr="all" style="margin-bottom:${U * 1.4}px">全部修理する（${fmt(all)}G）</div>` : '') : '<div class="p">修理が必要な道具はない。</div>');
 }
 function bindForgeRepair(a) {
   bind('[data-fr]', d => { const list = d.fr === 'all' ? S.toolInv.filter(t => t.dur < TOOL_DUR[t.id]) : [S.toolInv.find(t => t.uid === +d.fr)].filter(Boolean);
-    const c = list.reduce((x, t) => x + repairCost(t), 0); if (!list.length || S.gold < c) return; S.gold -= c; list.forEach(t => t.dur = TOOL_DUR[t.id]);
+    const c = list.reduce((x, t) => x + repairCost(t), 0); if (!list.length || S.gold < c) return; S.gold -= c; list.forEach(t => { const br = t.dur <= 0; t.dur = TOOL_DUR[t.id]; if (br) giveTool(t.uid); });
     sfx('ok'); dirty = true; renderHot(); toast(`ガルド「ほれ、新品同様だ」（${fmt(c)}G）`); openForge(a); });
 }
 function bindForgeDeep(a) {
@@ -7796,7 +7847,7 @@ function mineObjs() {
   for (const p of FL.plants || []) o.push({id:'pl' + p.x + '_' + p.y, lb:`${ingName(p.id)}を採る`, r:[p.x - 2, p.y - 2, p.x + 14, p.y + 14], st:[p.x + 6, p.y + 18], act:() => pickPlant(p)});
   return o;
 }
-const bestOf = kind => { let b = null; for (const t of S.toolInv) { const tl = TOOLI[t.id]; if (tl.kind === kind && (!b || tl.tier > TOOLI[b.id].tier)) b = t; } return b; };
+const bestOf = kind => { let b = null; for (const t of S.toolInv) { const tl = TOOLI[t.id]; if (t.dur > 0 && tl.kind === kind && (!b || tl.tier > TOOLI[b.id].tier)) b = t; } return b; };
 function heldOr(kind) { const h = heldItem(); if (h && h.t === 'tool' && toolOf(h).kind === kind) return toolInst(h.uid); return bestOf(kind); }
 function buffOn(k) { const b = mineState().buff[k]; return b && b > S.t; }
 let swingT = 0, attackT = 0, hurtT = 0;
