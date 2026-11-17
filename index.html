@@ -1158,6 +1158,7 @@ function newTool(id) { tut('tool_' + TOOLI[id].kind); const uid = (S.uidN = (S.u
 function bestInst(kind) { let b = null; for (const t of S.toolInv) if (TOOLI[t.id].kind === kind && (!b || TOOLI[t.id].price > TOOLI[b.id].price)) b = t; return b; }
 function useTool(inst) {
   inst.dur--; dirty = true;
+  { const mx = TOOL_DUR[inst.id]; if (inst.dur === Math.ceil(mx * .2)) toast(`⚠ ${TOOLI[inst.id].name}の耐久が残り${inst.dur}。鍛冶屋で安く修理できる（壊れると無くなる）`, 3500); }
   if (inst.dur <= 0) { S.toolInv = S.toolInv.filter(t => t !== inst); toast(`💥 ${TOOLI[inst.id].name}が壊れた……市場の「道具」で買い直そう。`, 3500); sfx('break'); syncBag(); }
 }
 function syncBag() {
@@ -1581,7 +1582,7 @@ function hud() {
   const rs = S.resv ? `🍷宴会 ${dishInfo(S.resv.key).name}×${S.resv.n}（あと${fmtLeft(S.resv.due - S.t)}）` : '';
   const gl = g ? `目標：${g.t}` : rs || '目標はすべて達成！';
   if (scene === 'mine' && FL) { const M = mineState(), b = (v, mx, c) => `<span style="position:relative;display:inline-block;width:${U * 26}px;height:${U * 4.2}px;background:#140c08;vertical-align:middle;margin:0 ${U * .8}px;border:1px solid #3a2a1e;border-radius:2px;overflow:hidden"><i style="display:block;height:100%;width:${Math.max(0, Math.min(100, v / mx * 100))}%;background:${c}"></i><b style="position:absolute;inset:0;text-align:center;line-height:${U * 4.2}px;font-size:${U * 3.4}px;color:#fff;text-shadow:0 0 2px #000,0 0 2px #000">${Math.max(0, Math.round(v))}/${Math.round(mx)}</b></span>`;
-    const h = `<div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${FL.vault ? '隠し部屋' : FL.ak ? '古の厨房' : FL.dg ? DGD[FL.dg].n : FL.v ? DEEP_VN[FL.v] : LAYERS[layerOf(FL.f)].n}${FL.curse ? '🗿' + FL.curse : ''}${buffOn('atk') ? ' ⚔' : ''}${buffOn('mine') ? ' ⛏' : ''}${buffOn('def') ? ' 🛡' : ''}</div><div style="white-space:nowrap">体力${b(M.hp, M.hpMax, '#c83a3a')}気力${b(M.st, M.stMax, '#4ab05a')}</div>`;
+    const h = `<div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${FL.vault ? '隠し部屋' : FL.ak ? '古の厨房' : FL.dg ? DGD[FL.dg].n : FL.v ? DEEP_VN[FL.v] : LAYERS[layerOf(FL.f)].n}　<span style="color:#e8c060">Lv${plSt().lv}</span>${FL.curse ? '🗿' + FL.curse : ''}${buffOn('atk') ? ' ⚔' : ''}${buffOn('mine') ? ' ⛏' : ''}${buffOn('def') ? ' 🛡' : ''}</div><div style="white-space:nowrap">体力${b(M.hp, M.hpMax, '#c83a3a')}気力${b(M.st, M.stMax, '#4ab05a')}</div>`;
     if ($('goal').dataset.h !== h) { $('goal').innerHTML = h; $('goal').dataset.h = h; $('goal').style.whiteSpace = 'normal'; } }
   else if ($('goal').dataset.h !== gl) { $('goal').textContent = gl + ' ▼'; $('goal').dataset.h = gl; $('goal').style.whiteSpace = ''; }
   if (goalOpen) {
@@ -1648,7 +1649,7 @@ function chipAct(c) {
   else if (c === 'todo') openTodo();
   else if (c === 'tmap') openTmList();
   else if (c === 'moon') { if (takeIng('moon_extract', false, 1)) { S.luck3T = S.t + 1800; sfx('ok'); syncBag(); toast('✨ 月光エキスを使った。30分間、金色の食材がとても出やすい。', 3500); } }
-  else if (c === 'scroll') { if (takeIng('scroll', false, 1)) { closeModal(); exitMine(true); } }
+  else if (c === 'scroll') { if (takeIng('scroll', false, 1)) { closeModal(); scrollReturn(); } }
   dirty = true; chips();
 }
 
@@ -1797,7 +1798,8 @@ function openForge(a) {
       return `<span>${ARMOR_N[nt]}（ダメージ -${Math.round(ARMOR_DEF[nt] * 100)}%）　${lock ? `🔒 ${ingName(GEAR[nt - 1].unlock)}を掘り出すと作れる（${srcHint(GEAR[nt - 1].unlock)}）` : needHTML(need) + '　' + fmt(fee) + 'G'}</span></div>${lock ? '' : `<div class="btn ${needOk(need) && S.gold >= fee ? '' : 'dis'}" data-arm="${nt}">作る</div>`}</div>`; })() : '<span>最高の防具だ</span></div></div>'); }
   html += forgeDeepHTML();
   html += `<div class="h">宝石の器（陳列棚に置くと、その棚の料理が高くても売れる）</div>` + WARES.map(w => `<div class="row"><div class="t"><b>${w.name}（+${w.bonus * 100}%）　所持 ${S.wares[w.id] || 0}</b><span>${needHTML(w.need)}　${fmt(w.cost)}G</span></div><div class="btn ${needOk(w.need) && S.gold >= w.cost ? '' : 'dis'}" data-w="${w.id}">作る</div></div>`).join('');
-  modal('鍛冶屋ガルド', html, 'forge'); bindForgeDeep(a);
+  html = html.replace('<div class="h">防具', forgeRepairHTML() + '<div class="h">防具');
+  modal('鍛冶屋ガルド', html, 'forge'); bindForgeDeep(a); bindForgeRepair(a);
   bind('[data-a=talk]', () => { closeModal(); if (a) talk(a); else toast('ガルド「腹が減っては槌も振れん！ 用があるなら言ってくれ」'); });
   bind('[data-a=wf]', () => openWForge()); bind('[data-a=ench]', () => openEnchant()); bind('[data-a=gear]', () => openGear());
   bind('[data-arm]', d => { const t = +d.arm, need = armorNeed(t), fee = armorFee(t); if (!needOk(need) || S.gold < fee) return; for (const [k, n] of Object.entries(need)) takeIng(k, false, n); S.gold -= fee; S.armor = t; sfx('ok'); tut('armor'); toast(`ガルド「${ARMOR_N[t]}だ。これで少しは無茶ができるぞ」`, 3000); openForge(a); });
@@ -2315,12 +2317,16 @@ function openMachine(slot) {
   html += `<div class="h">加工法</div>`;
   m.recipes.forEach((r, ri) => {
     const lock = r.lv > st.lv, cnt = {}; r.ins.forEach(x => cnt[x] = (cnt[x] || 0) + 1);
-    const ok = !lock && Object.keys(cnt).every(x => haveIng(x) >= cnt[x]) && st.q.length < cap;
-    html += `<div class="row">${ingIc(r.out, U * 11, false, true)}<div class="t"><b>${ingName(r.out)}×${r.n}${lock ? `　🔒Lv${r.lv}` : ''}</b>${procSave(r)}<span>${Object.keys(cnt).map(x => `<span class="chipin ${haveIng(x) >= cnt[x] ? 'ok' : 'ng'}">${ingLabel(x)}${cnt[x] > 1 ? '×' + cnt[x] : ''}</span>`).join('')}　${r.sec}秒</span></div><div class="btn ${ok ? '' : 'dis'}" data-r="${ri}">仕込む</div></div>`;
+    const hv = x => haveIng(x) + haveIng(x, true), miss = Object.keys(cnt).filter(x => hv(x) < cnt[x]), full = st.q.length >= cap;
+    const ok = !lock && !miss.length && !full, buyC = miss.every(x => ING[INGI[x]].src[0] === 'market') ? miss.reduce((a, x) => a + ING[INGI[x]].src[1] * (cnt[x] - hv(x)), 0) : -1;
+    html += `<div class="row">${ingIc(r.out, U * 11, false, true)}<div class="t"><b>${ingName(r.out)}×${r.n}${lock ? `　🔒Lv${r.lv}` : ''}</b>${procSave(r)}<span>${Object.keys(cnt).map(x => `<span class="chipin ${hv(x) >= cnt[x] ? 'ok' : 'ng'}">${ingName(x)}${cnt[x] > 1 ? '×' + cnt[x] : ''}（${hv(x)}）</span>`).join('')}　${r.sec}秒${lock ? '' : full ? '<br><span style="color:#d8806a">予約がいっぱい</span>' : miss.length ? `<br><span style="color:#d8806a">足りない：${miss.map(x => ingName(x) + '×' + (cnt[x] - hv(x)) + ({seed:'（畑で育てる・種は市場）', market:'（市場）', pier:'（釣り）', forage:'（採集）', tree:'（果樹）', proc:'（加工）'}[ING[INGI[x]].src[0]] || '')).join('・')}</span>` : ''}</span></div>${!lock && !full && miss.length && buyC >= 0 ? `<div class="btn ${S.gold >= buyC ? 'grn' : 'dis'}" data-rb="${ri}" style="font-size:.85em">買って仕込む<br>${fmt(buyC)}G</div>` : `<div class="btn ${ok ? '' : 'dis'}" data-r="${ri}">仕込む</div>`}</div>`;
   });
   html += st.lv < 3 ? `<div class="row"><div class="t"><b>${m.name}を強化 Lv${st.lv}→${st.lv + 1}</b><span>加工が速くなり、予約枠と加工法が増える</span></div><div class="btn ${S.gold >= upC ? '' : 'dis'}" data-a="up">${fmt(upC)}G</div></div>` : '';
   modal(`${m.name} Lv${st.lv}`, html, 'mach');
-  bind('[data-r]', d => { const r = m.recipes[+d.r]; if (st.q.length >= cap) return; for (const x of r.ins) if (!haveIng(x)) return; r.ins.forEach(x => takeIng(x, false, 1)); st.q.push({r:+d.r, t:0}); sfx('tick'); dirty = true; openMachine(slot); });
+  const takeAny = x => takeIng(x, false, 1) || takeIng(x, true, 1);
+  bind('[data-r]', d => { const r = m.recipes[+d.r]; if (st.q.length >= cap) return; const c = {}; r.ins.forEach(x => c[x] = (c[x] || 0) + 1); for (const x in c) if (haveIng(x) + haveIng(x, true) < c[x]) return; r.ins.forEach(takeAny); st.q.push({r:+d.r, t:0}); sfx('tick'); dirty = true; openMachine(slot); });
+  bind('[data-rb]', d => { const r = m.recipes[+d.rb]; if (st.q.length >= cap) return; const c = {}; r.ins.forEach(x => c[x] = (c[x] || 0) + 1); let cost = 0; for (const x in c) { const l = c[x] - haveIng(x) - haveIng(x, true); if (l > 0) { if (ING[INGI[x]].src[0] !== 'market') return; cost += ING[INGI[x]].src[1] * l; } } if (S.gold < cost) return toast('お金が足りない');
+    for (const x in c) { const l = c[x] - haveIng(x) - haveIng(x, true); if (l > 0) buyMarket(x, l); } r.ins.forEach(takeAny); st.q.push({r:+d.rb, t:0}); sfx('coin'); dirty = true; toast(`足りない材料を市場で買って仕込んだ（${fmt(cost)}G）`); openMachine(slot); });
   bind('[data-a=up]', () => { if (S.gold < upC) return; S.gold -= upC; st.lv++; sfx('ok'); dirty = true; openMachine(slot); });
 }
 // ---------- ranch & workshop
@@ -2598,13 +2604,13 @@ function openMarket() {
 function mkSeg() { return `<div class="seg">${[['seed','種'],['food','食材'],['tool','道具'],['book','本'],['sell','買取'],['trade','相場']].filter(x => (x[0] !== 'sell' || unl('mine')) && (x[0] !== 'trade' || unl('trade'))).map(([k, n]) => `<div class="${mkTab === k ? 'on' : ''}" data-t="${k}">${n}</div>`).join('')}</div>`; }
 const MK_POTS = ['p_heal', 'p_heal2', 'p_stam'];
 function openTools() {
-  let html = mkSeg() + '<div class="p">道具には耐久力がある。使うたびに減り、0になると壊れる。修理（新品の半額×減った分）か買い直しを。</div>';
+  let html = mkSeg() + '<div class="p">道具には耐久力がある。使うたびに減り、0になると壊れて無くなる。ここでの修理は新品の半額×減った分。<b>鍛冶屋ガルド（古井戸の下の小屋・施設タブ）なら、その4割の値段で修理できる。</b></div>';
   if (S.toolInv.length) {
     html += '<div class="h">持っている道具</div>';
     for (const t of S.toolInv) { const tl = TOOLI[t.id], mx = TOOL_DUR[t.id], c = Math.max(1, Math.round(tl.price * .5 * (1 - t.dur / mx))) || 0, r = t.dur / mx;
       html += `<div class="row">${icHTML(tl.icon, U * 11, 'atlas', null, 't:' + tl.id)}<div class="t"><b>${tl.name}</b><span>耐久 ${t.dur}/${mx}${S.bag.some(x => x && x.k === 't' && x.uid === t.uid) ? '' : '（倉庫）'}</span><div class="bar"><i style="width:${r * 100}%"></i></div></div>${t.dur < mx && tl.price ? `<div class="btn ${S.gold >= c ? '' : 'dis'}" data-rep="${t.uid}">修理<br>${fmt(c)}G</div>` : ''}</div>`; }
   }
-  if (unl('mine')) html += `<div class="row">${ingIc('scroll', U * 11, false, true)}<div class="t"><b>帰還の巻物</b><span>地下迷宮からすぐ地上へ戻れる。拾った物は失わない（所持 ${haveIng('scroll')}）</span></div><div class="btn ${S.gold >= 120 ? '' : 'dis'}" data-scroll="1">120G</div></div>`;
+  if (unl('mine')) html += `<div class="row">${ingIc('scroll', U * 11, false, true)}<div class="t"><b>帰還の巻物</b><span>迷宮からすぐ地上へ戻れる。帰り道のおまけで拾った物が2割増え、「帰還の印」で次はその階から再開できる。倒れそうな時は自動で使われる（所持 ${haveIng('scroll')}）</span></div><div class="btn ${S.gold >= 120 ? '' : 'dis'}" data-scroll="1">120G</div></div>`;
   if (unl('dungeon')) { html += '<div class="h">薬（調合小屋で作るほうが安い）</div>'; for (const id of MK_POTS) { const p = ING[INGI[id]].value * 3; html += `<div class="row">${ingIc(id, U * 11, false, true)}<div class="t"><b>${ingName(id)}</b><span>${ING[INGI[id]].desc || ''}（所持 ${haveIng(id)}）</span></div><div class="btn ${S.gold >= p ? '' : 'dis'}" data-bpot="${id}:1">×1<br>${fmt(p)}G</div><div class="btn ${S.gold >= p * 5 ? '' : 'dis'}" data-bpot="${id}:5">×5</div></div>`; } }
   if (unl('forage')) html += `<div class="row">${ingIc('bait', U * 11, false, true)}<div class="t"><b>エサ</b><span>かご罠に使う（所持 ${haveIng('bait')}）</span></div><div class="btn ${S.gold >= 50 ? '' : 'dis'}" data-bait="10">×10<br>50G</div></div>
     <div class="row">${charHTML('trap', U * 11)}<div class="t"><b>かご罠</b><span>生簀や海岸に仕掛けると放置で獲物が獲れる（手持ち ${S.trapItems || 0}）</span></div><div class="btn ${S.gold >= 300 ? '' : 'dis'}" data-trap="1">300G</div></div>`;
@@ -3051,6 +3057,9 @@ const TUT = {
   m_staff:['従業員', '雇うと留守中も仕事をしてくれる（最大8時間分）。<br>料理人は覚えたレシピを作り、店員は自動で棚に並べて売る。'],
   m_orders:['依頼の掲示板', '住民の注文。<b>①書いてある料理を作る</b>（まだ作ったことがない料理は、名前・調理法・材料の数・材料1つがヒント。残りの材料はかまどで試して探す）<br><b>②棚に並べずに「届ける」</b>。作った直後の「できあがり」画面からも届けられる。棚に並べるとお客さんが買ってしまうので注意。<br>作れそうにない依頼は、1日1回「入れ替え」できる。<br>宴会の予約・評論家の記事・料理コンテストもここで見られる。'],
   m_forgehut:['鍛冶小屋', '古井戸の下に、ガルドの鍛冶小屋ができた。<br>小屋をタップすると、いつでも鍛冶（ツルハシ・武器・防具・付与・器）ができる。<br>「施設」タブの「⚒ 鍛冶屋ガルド」からも開ける。'],
+  m_plv:['主人公のレベル', '迷宮やダンジョンで魔物を倒す・岩を砕くと経験がたまり、主人公のレベルが上がる。<br>Lvが1上がるごとに、最大体力+5・最大気力+4（最大Lv50）。迷宮の上の帯に今のLvが出る。'],
+  m_plate:['初めての味', '迷宮の「食べる」で、まだ食べたことのない料理を食べると、最大体力+1（2品ごとに最大気力も+1）。100品まで。<br>食べる画面で「✨初めて」と出ている料理が対象。'],
+  m_scroll:['帰還の巻物', '使うとすぐ地上（ダンジョンなら町）へ戻る。<br>①帰り道のおまけで、その回に拾った物が2割増える<br>②「帰還の印」が残り、次は入口から「その階から再開」を選べる（1回だけ）<br>③持っていれば、倒れそうな時に自動で使われ、何も失わない'],
   m_up:['上の階へ戻る', '降りてきたはしご（画面の上）から、上の階へ戻れる。<br>戻った階は、壊した岩も倒した魔物もそのまま（復活しない）。<br>ツルハシが壊れたときも、はしごを登って地上へ帰れる。'],
   m_wish:['作るリスト', '☆を押したレシピが「作るリスト」に入る。何品でも入れられ、＋−で皿数も決められる。<br>市場では、必要な食材に★がつき、「あと何個」「必要・手持ち」が出る（★の食材は一覧の上に並ぶ）。<br>レシピ帳のいちばん上で、そろった材料と足りない食材の合計が見られる。<br><b>作るリストの材料は、料理人が倉庫から使わずに取っておく。</b>自分で作るたびに皿数が減り、0になるとリストから外れる。'],
   m_rec:['レシピ帳', '覚えたレシピと、作ったことのあるレシピ。<br>本を買うか、住民や常連客と仲良くなると増える。'],
@@ -4909,7 +4918,9 @@ const MAN = [
     '店員を雇うと「自動販売」ができる。値付けの方針（安め・通常・強気）を選べる。',
     '店の格（屋台級→町の食堂→評判の店→名店→伝説の宵闇亭）は評判と売った皿数で上がり、客が増えて高い物も買われるようになる。',
     '評判は高くなるほど上がりにくい。'])},
-  {k:'forgehut', t:'鍛冶小屋', c:() => true, h:() => li(['古井戸（地下迷宮の入口）の下に、鍛冶屋ガルドの小屋がある。タップで鍛冶の画面。', '「施設」タブのいちばん上の「⚒ 鍛冶屋ガルド」からも、どこにいても開ける。', 'できること：ツルハシの強化・武器を作る・付与・防具・宝石の器・鍛え直し（解放した物だけ）。', '出張販売の屋台は、広場の左下に移った。'])},
+  {k:'plgrow', t:'主人公の成長', c:() => unl('mine'), h:() => li(['<b>レベル</b>：迷宮・ダンジョンで魔物を倒す（深いほど多い、ボスは60）・岩を砕く（1）と経験。次のLvまで 40×今のLv。Lvごとに最大体力+5・最大気力+4、最大Lv50。今 Lv' + plSt().lv + '（' + plSt().xp + '/' + plNeed(plSt().lv) + '）', '<b>初めての味</b>：迷宮の「食べる」で初めて食べる料理ごとに最大体力+1、2品ごとに最大気力+1（100品まで。今 ' + plSt().an + '品）', 'ほかに：新しい層に初めて着く（体力+15×5）・公衆浴場（体力と気力+20）・究極の料理・老騎士バルド♥4'])},
+  {k:'scroll', t:'帰還の巻物', c:() => unl('mine'), h:() => li(['市場の「道具」で120G。迷宮の上の「📜」で使う。', '帰り道のおまけ：その回に拾った物が2割増える。', '帰還の印：次は迷宮の入口（専用ダンジョンの入口）で「その階から再開」を選べる（1回だけ、昇降機のない階でも）。', '持っていれば、倒れそうな時に自動で使われ、拾った物を失わない（エリクサーより先）。'])},
+  {k:'forgehut', t:'鍛冶小屋', c:() => true, h:() => li(['古井戸（地下迷宮の入口）の下に、鍛冶屋ガルドの小屋がある。タップで鍛冶の画面。', '「施設」タブのいちばん上の「⚒ 鍛冶屋ガルド」からも、どこにいても開ける。', 'できること：ツルハシの強化・<b>道具の修理（市場の4割の値段）</b>・武器を作る・付与・防具・宝石の器・鍛え直し（解放した物だけ）。', '出張販売の屋台は、広場の左下に移った。'])},
   {k:'wish', t:'作るリスト', c:() => true, h:() => li(['レシピ帳で、レシピの右の☆を押すと「作るリスト」に入る（もう一度押すと外れる）。何品でも入れられる。', 'レシピ帳のいちばん上に作るリスト：＋−で皿数、✕で外す。食材ごとに「手持ち/必要」、材料がそろうと「材料そろった」。', '市場の「食材」「種」では、作るリストに必要な食材に★がつき、一覧の上に並ぶ。「あと○個（必要・手持ち）」も出る。', '作るリストに必要な数の食材は、料理人が倉庫から使わない（取り置き）。足りない分は、料理人が自分で市場から買う。自分で作るたびにリストの皿数が1減り、0で外れる。'])},
   {k:'orders', t:'依頼の掲示板', c:() => unl('orders'), h:() => li(['店の外（広場の右上）の掲示板に、料理の注文が貼られる。期限までに届けるとお金と評判。', 'まだ作ったことがない料理は、名前・調理法・材料の数・材料1つがヒントとして書いてある（残りはかまどで試して探す）。依頼に出るのは、いま手に入る材料で作れる料理だけ。', '倉庫・カバン・棚のどこにある料理でも届けられる。ただし棚に並べるとお客さんが買ってしまう。作った直後の「できあがり」画面の「📜 依頼に届ける」が確実。', '作れそうにない依頼は、1日1回「入れ替え」できる。', '宴会の予約（たくさんの皿）が入ることもある。暦にも載る。'])},
   {k:'staff', t:'従業員', c:() => unl('staff'), h:() => li(Object.values(STAFF).map(s => `<b>${s.name}</b>：${s.desc}（最大${s.max}人）`).concat([
@@ -5107,7 +5118,7 @@ const MAN = [
 ];
 let manSel = 'flow';
 const MAN_CAT = [['基本', ['flow', 'ctrl', 'cook', 'wish', 'forgehut', 'shop', 'orders', 'fac', 'xfer', 'src']], ['店', ['staff', 'reg', 'critic', 'decor', 'night', 'expand', 'town', 'money', 'contest', 'cellar', 'rival', 'fame', 'kiwami', 'airec', 'stall', 'merchant']],
-  ['農・釣り', ['farm', 'ranch', 'mach', 'breed', 'fish', 'forage', 'season', 'quality']], ['冒険', ['mine', 'monster', 'story', 'guild', 'arms', 'dungeon', 'secrets', 'abyss', 'tower']],
+  ['農・釣り', ['farm', 'ranch', 'mach', 'breed', 'fish', 'forage', 'season', 'quality']], ['冒険', ['mine', 'plgrow', 'scroll', 'monster', 'story', 'guild', 'arms', 'dungeon', 'secrets', 'abyss', 'tower']],
   ['町・遠征', ['expedition', 'desert', 'tea', 'capital', 'isle', 'caravan', 'mirror']], ['やり込み', []]];
 const manCatOf = k => (MAN_CAT.find(c => c[1].includes(k)) || MAN_CAT[MAN_CAT.length - 1])[0];
 let manCat = '基本', manQ = '';
@@ -5613,6 +5624,19 @@ function forgeDeepHTML() {
   return `<div class="h">鍛え直し（奈落晶で上限なく強くする）</div>
     <div class="row"><div class="t"><b>剣の鍛え直し ＋${s} → ＋${s + 1}</b><span>攻撃 +12%ずつ（いま +${s * 12}%）　${needHTML(needS)}　${fmt(feeS)}G</span></div><div class="btn ${needOk(needS) && S.gold >= feeS ? '' : 'dis'}" data-fs="1">鍛える</div></div>
     <div class="row"><div class="t"><b>防具の鍛え直し ＋${a} → ＋${a + 1}</b><span>受けるダメージ ÷(1＋0.1×段階)（いま -${Math.round((1 - forgeMulA()) * 100)}%）　${needHTML(needA)}　${fmt(feeA)}G</span></div><div class="btn ${needOk(needA) && S.gold >= feeA ? '' : 'dis'}" data-fa="1">鍛える</div></div>`;
+}
+// v0.52.5：鍛冶屋の修理（市場の修理の半額以下。買い直し・強化よりずっと安い）
+const repairCost = t => { const tl = TOOLI[t.id], mx = TOOL_DUR[t.id]; return t.dur >= mx ? 0 : Math.max(1, Math.round((tl.price || 80) * .2 * (1 - t.dur / mx))); };
+function forgeRepairHTML() {
+  const ts = S.toolInv.filter(t => t.dur < TOOL_DUR[t.id]); const all = ts.reduce((a, t) => a + repairCost(t), 0);
+  return `<div class="h">⚒ 修理（市場の修理の4割の値段）</div>` + (ts.length ? ts.map(t => { const tl = TOOLI[t.id], mx = TOOL_DUR[t.id], c = repairCost(t);
+    return `<div class="row">${icHTML(tl.icon, U * 10, 'atlas', null, 't:' + tl.id)}<div class="t"><b>${tl.name}</b><span>耐久 ${t.dur}/${mx}　新品 ${fmt(tl.price || 80)}G</span></div><div class="btn ${S.gold >= c ? 'grn' : 'dis'}" data-fr="${t.uid}">${fmt(c)}G</div></div>`; }).join('')
+    + (ts.length > 1 ? `<div class="btn big ${S.gold >= all ? 'grn' : 'dis'}" data-fr="all" style="margin-bottom:${U * 1.4}px">全部修理する（${fmt(all)}G）</div>` : '') : '<div class="p">修理が必要な道具はない。</div>');
+}
+function bindForgeRepair(a) {
+  bind('[data-fr]', d => { const list = d.fr === 'all' ? S.toolInv.filter(t => t.dur < TOOL_DUR[t.id]) : [S.toolInv.find(t => t.uid === +d.fr)].filter(Boolean);
+    const c = list.reduce((x, t) => x + repairCost(t), 0); if (!list.length || S.gold < c) return; S.gold -= c; list.forEach(t => t.dur = TOOL_DUR[t.id]);
+    sfx('ok'); dirty = true; renderHot(); toast(`ガルド「ほれ、新品同様だ」（${fmt(c)}G）`); openForge(a); });
 }
 function bindForgeDeep(a) {
   bind('[data-fs]', () => { const s = S.forgeS || 0, need = {naraku:2 + s}, fee = 20000 * (s + 1); if (!needOk(need) || S.gold < fee) return; takeIng('naraku', false, need.naraku); S.gold -= fee; S.forgeS = s + 1; sfx('ok'); tut('abyss_forge'); toast(`ガルド「剣を＋${s + 1}に鍛え直した。奈落の底まで斬れるぞ」`, 3000); openForge(a); });
@@ -6548,13 +6572,13 @@ function payCurse() { const M = mineState(), L = dgSt().cl || 0; if (!L || !unl(
 function openDgEntry(dg, ret) {
   if (!unl('dungeon')) return gateMsg('dungeon'); tut('dungeon');
   const G = DGD[dg], D_ = dgSt(), best = D_.best[dg] || 0, wk = Math.floor(gday() / 7), full = D_.wk[dg] !== wk, cl = unl('curse') ? (D_.cl || 0) : 0;
-  const nf = G.fl || 10, mid = Math.floor(nf / 2) + 1, starts = [[1, '1階から入る']]; if (best >= mid) starts.push([mid, mid + '階から入る']); if ((D_.kb[dg] || 0) > 0) starts.push([nf + 1, '最奥（ボスの間）へ直行']);
+  const nf = G.fl || 10, mid = Math.floor(nf / 2) + 1, starts = [[1, '1階から入る']]; if (D_.mark && D_.mark.dg === dg && D_.mark.f > 1) starts.unshift([-D_.mark.f, `📜 帰還の印：${D_.mark.f}階から再開（1回だけ）`]); if (best >= mid) starts.push([mid, mid + '階から入る']); if ((D_.kb[dg] || 0) > 0) starts.push([nf + 1, '最奥（ボスの間）へ直行']);
   modal(G.n, `<img src="${IMG['dg_gate_' + dg].src}" style="width:100%;image-rendering:pixelated;border-radius:4px">
     <div class="p">${G.d}<br>全${nf}階＋最奥。魔物：${G.mons.map(k => MONT[k].n).join('・')}。最奥のボス：<b>${MONT[G.boss].n}</b><br>これまでの最深 ${best ? (best > nf ? '最奥' : best + '階') : 'まだ入っていない'}　ボスを倒した回数 ${D_.kb[dg] || 0}回</div>
     <div class="p">今週のボスのごほうび：${full ? '<b style="color:#8ad86a">まだ受け取っていない（全部もらえる）</b>' : `受け取り済み（あと${7 - gday() % 7}日で戻る。それまでは少なめ）`}</div>
-    ${curseUI(cl)}${starts.map(([f, lb]) => `<div class="btn big ${f === nf + 1 ? 'red' : f > 1 ? 'blu' : ''}" data-df="${f}" style="margin-top:${U}px">${lb}</div>`).join('')}`, 'dgentry');
+    ${curseUI(cl)}${starts.map(([f, lb]) => `<div class="btn big ${f < 0 ? 'grn' : f === nf + 1 ? 'red' : f > 1 ? 'blu' : ''}" data-df="${f}" style="margin-top:${U}px">${lb}</div>`).join('')}`, 'dgentry');
   bind('[data-cl]', d => { D_.cl = +d.cl; tut('curse'); openDgEntry(dg, ret); });
-  bind('[data-df]', d => { if (!payCurse()) return; D_.ret = ret || G.town; enterDg(dg, +d.df); });
+  bind('[data-df]', d => { if (!payCurse()) return; D_.ret = ret || G.town; let f = +d.df; if (f < 0) { f = -f; D_.mark = null; } enterDg(dg, f); });
 }
 function openDgList(ret) {
   if (!unl('dungeon')) return gateMsg('dungeon');
@@ -7833,7 +7857,7 @@ function mineUpdate(dt) {
 }
 function tripAdd(id, n) { const M = mineState(); M.trip[id] = (M.trip[id] || 0) + n; }
 function breakRock(rk, pk) {
-  const M = mineState(); FL.rocks = FL.rocks.filter(o => o !== rk); FL.broken++; if (pk) useTool(pk); renderHot();
+  const M = mineState(); FL.rocks = FL.rocks.filter(o => o !== rk); FL.broken++; if (pk) useTool(pk); renderHot(); plXp(1);
   if (rk.k !== 'stone') { const n = 1 + (Math.random() < .3 ? 1 : 0); giveBag('i', rk.k, false, n); tripAdd(rk.k, n); M.ever[rk.k] = true; S.known.i[rk.k] = true; floatAt(rk.x + 8, rk.y - 4, `${ingName(rk.k)} +${n}`, 'info');
     const g = GEAR.find(x => x.unlock === rk.k); if (g && !M['ann' + g.tier]) { M['ann' + g.tier] = true; toast(`⛏ ${ingName(rk.k)}を掘り出した！ 市場に<b>${g.name}のツルハシと剣</b>が並ぶようになった。`, 4500); } }
   else if (Math.random() < .14 * (gearFx().forage ? 2 : 1)) { const id = FL.dg ? pick(DGD[FL.dg].mats) : pick(LAYERS[layerOf(FL.f)].forage); giveBag('i', id, false, 1); tripAdd(id, 1); floatAt(rk.x + 8, rk.y - 4, ingName(id) + ' +1', 'info'); }
@@ -7848,7 +7872,7 @@ function killMon(m, sw) {
   monPartDrop(m); gearOnKill(m);
   if (m.boss && FL.dg) bossDefeated(m);
   if (m.trial && S.cp && S.cp.q && S.cp.q.k === 'grant') { S.cp.q.done = 1; toast('⚔ 試練の魔物を倒した！ ギルド前のグラントに報告しよう', 4000); }
-  mrTame(m); mrEggDrop(FL, m.boss ? .5 : .004); tmDrop(.005, '魔物が落とした'); famXp(m.boss ? 30 : 1 + Math.floor(((FL.eqf || FL.f) || 1) / 12));
+  plXp(m.boss ? 60 : 2 + Math.floor(((FL.eqf || FL.f) || 1) / 8)); mrTame(m); mrEggDrop(FL, m.boss ? .5 : .004); tmDrop(.005, '魔物が落とした'); famXp(m.boss ? 30 : 1 + Math.floor(((FL.eqf || FL.f) || 1) / 12));
   for (const [id, p] of MONT[m.k].drop) if (Math.random() < p * monDropMul(m.k) * curseDrop() * accMul('luck') * (1 + .2 * (gearFx().luck || 0))) { giveBag('i', id, false, 1); tripAdd(id, 1); floatAt(m.x, m.y - 10, ingName(id) + ' +1', 'info'); }
   if (FL.v) { deepKill(m); legRoll(.002, 'naraku_kinoko', '奈落の深層の魔物が落とした。'); }
   if (FL.special === 'nest' && !FL.mons.length && !FL.ladder) { const p = randWalk(FL); FL.ladder = {x:p[0] - 8, y:p[1] - 8}; toast('魔物を全滅させた！ 階段が現れた。'); }
@@ -7873,7 +7897,29 @@ function descend() {
 }
 function enterMine(f) { const M = mineState(); if (!payCurse()) return; M.hp = M.hpMax; M.st = M.stMax + (gearAccOn('ring_stam') ? 20 : 0); M.trip = {}; M.buff = {}; M.revive = 0; M.charm = 0; M.seraRev = 0; genFloor(f); closeModal(); go('mine', 72, 52); deepEnterMsg(f); }
 function exitMine(scrollUsed) { if (FL && FL.dg) { exitDg(); if (scrollUsed) toast('帰還の巻物で外に出た。'); return; } const M = mineState(); M.cl = 0; M.hp = M.hpMax; M.st = M.stMax; M.trip = {}; FL = null; player.mining = player.target = null; go('outside', 48, 222); if (scrollUsed) toast('帰還の巻物で地上に戻った。'); }
+function plSt() { if (!S.pl) { const k = Object.values(S.kills || {}).reduce((a, b) => a + b, 0); S.pl = {lv:1, xp:Math.min(20000, k * 2), ate:{}, an:0}; } return S.pl; }
+const plNeed = lv => 40 * lv;
+function plXp(n) {
+  if (!unl('mine')) return; const P = plSt(); if (P.lv >= 50) return; P.xp += n; let up = 0;
+  while (P.lv < 50 && P.xp >= plNeed(P.lv)) { P.xp -= plNeed(P.lv); P.lv++; up++; const M = mineState(); M.hpMax += 5; M.stMax += 4; M.hp = Math.min(M.hpMax, M.hp + 5); M.st = Math.min(M.stMax, M.st + 4); }
+  if (up) { tut('m_plv'); sfx('ok'); if (scene === 'mine' && FL) floatAt(player.x, player.y - 30, `Lv${P.lv}！`, 'info'); toast(`⭐ 主人公が Lv${P.lv} になった！ 最大体力+${5 * up}・最大気力+${4 * up}`, 3000); dirty = true; }
+}
+function plAte(key) {
+  const P = plSt(); if (P.ate[key]) return; P.ate[key] = 1; P.an++; const M = mineState(); let t = '';
+  if (P.an <= 100) { M.hpMax += 1; t = '最大体力+1'; if (P.an % 2 === 0) { M.stMax += 1; t += '・最大気力+1'; } tut('m_plate'); floatAt(player.x, player.y - 34, `初めての味！ ${t}`, 'info'); }
+  dirty = true;
+}
+// v0.52.5：帰還の巻物＝帰還の印（次はその階から）・持ち帰り+20%・倒れそうな時に自動で使う
+function scrollReturn(auto) {
+  const M = mineState(); let bonus = []; tut('m_scroll');
+  for (const id in M.trip) { const n = Math.ceil(M.trip[id] * .2); if (n > 0 && ING[INGI[id]] && !isItem(id)) { add(S.inv, id, n); bonus.push(`${ingName(id)}×${n}`); } }
+  let mk = '';
+  if (FL && !FL.ak) { const f = FL.f; if (FL.dg) { const D_ = dgSt(), ff = Math.min(f, DGD[FL.dg].fl || 10); if (ff > 1) { D_.mark = {dg:FL.dg, f:ff}; mk = `${DGD[FL.dg].n}の${ff}階`; } } else if (f > 1) { M.mark = f; mk = `B${f}`; } }
+  exitMine(true);
+  setTimeout(() => popStory(`<div class="tth">📜 帰還の巻物${auto ? '（自動）' : ''}</div><div class="ttx">${auto ? '倒れそうになった瞬間、巻物が光って地上へ運んでくれた。何も失っていない。<br>' : ''}${bonus.length ? '帰り道のおまけ（拾った物の2割）：' + bonus.slice(0, 8).join('・') + (bonus.length > 8 ? ' ほか' : '') + '<br>' : ''}${mk ? `<b>帰還の印</b>を残した。次は入口で「${mk}から再開」を選べる（1回だけ）。` : ''}</div>`), 500);
+}
 function mineDie() {
+  if (FL && !FL.ak && !FL.vault && haveIng('scroll') && takeIng('scroll', false, 1)) { scrollReturn(true); return; }
   const M = mineState(); if (M.revive) { M.revive = 0; M.hp = M.hpMax / 2; floatAt(player.x, player.y - 24, 'エリクサー！', 'info'); toast('✨ エリクサーの力で立ち上がった！'); return; } let lost = [];
   for (const id in M.trip) { const n = Math.floor(M.trip[id] / 2); if (n > 0) { takeIng(id, false, Math.min(n, haveIng(id))); lost.push(`${ingName(id)}×${n}`); } }
   const dgR = FL && FL.dg ? dgReturn() : null; if (dgR) dgSt().cur = null;
@@ -7889,9 +7935,10 @@ function openMineEntry() {
   const html = `<div class="result"><div class="p">古井戸の底に続く鉱山。岩を掘って階段を探し、深く潜るほどレアな鉱石と魔物が増える。5階ごとに昇降機がある。</div>
     <div class="p">ツルハシ：${pk ? TOOLI[pk.id].name : '<span style="color:#d8806a">なし（市場の道具で買える）</span>'}　武器：${eqW() ? gDef(eqW()).name : 'なし（鍛冶屋で作る／装備画面で選ぶ）'}　防具：${ARMOR_N[S.armor || 0]}（鍛冶屋で作れる）　最大体力：${M.hpMax}<br>最深到達：${M.max ? 'B' + M.max : 'まだ入っていない'}</div>
     <div class="p">体力と気力は、持っていった<b>料理を食べると回復</b>する（迷宮の中の「食べる」ボタン）。倒れるとその回に拾った物の半分を失う。</div></div>` +
-    cps.map(f => `<div class="btn big ${f === 1 ? '' : 'blu'}" data-f="${f}" style="margin-bottom:${U * 1.2}px">${f === 1 ? '入口（B1）から入る' : `昇降機でB${f}（${LAYERS[layerOf(f)].n}）へ`}</div>`).join('');
+    (M.mark > 1 ? `<div class="btn big grn" data-mk="${M.mark}" style="margin-bottom:${U * 1.2}px">📜 帰還の印：B${M.mark}から再開（1回だけ）</div>` : '') + cps.map(f => `<div class="btn big ${f === 1 ? '' : 'blu'}" data-f="${f}" style="margin-bottom:${U * 1.2}px">${f === 1 ? '入口（B1）から入る' : `昇降機でB${f}（${LAYERS[layerOf(f)].n}）へ`}</div>`).join('');
   const i_ = html.indexOf('</div></div>') + 12; modal('地下迷宮', html.slice(0, i_) + curseUI(unl('curse') ? (dgSt().cl || 0) : 0) + html.slice(i_), 'mineentry');
   bind('[data-f]', d => enterMine(+d.f));
+  bind('[data-mk]', () => { const f = M.mark; M.mark = 0; enterMine(f); });
   bind('[data-cl]', d => { dgSt().cl = +d.cl; tut('curse'); openMineEntry(); });
 }
 function openElevator() {
@@ -7913,10 +7960,10 @@ function openEat() {
   const M = mineState(), items = allDishes();
   const html = `<div class="p">体力 ${Math.round(M.hp)}/${M.hpMax}　気力 ${Math.round(M.st)}/${M.stMax}<br>旨み→体力、甘い→気力。辛い★3以上で攻撃力アップ、ほろ苦い★3以上で採掘力アップ、酸っぱい★3以上で守りアップ（各1分）。金色の料理は効果2倍。</div>` +
     (items.map(x => { const t = dishTaste(x.k), e = EATFX(t), m = x.g ? 2 : 1;
-      return `<div class="row">${dishIcHTML(x.k, U * 10, x.g)}<div class="t"><b>${x.g ? '金色の' : ''}${dishInfo(x.k).name} ×${x.n}</b><span>体力+${e.hp * m}　気力+${e.st * m}${e.atk ? '　攻撃↑' : ''}${e.mine ? '　採掘↑' : ''}${e.def ? '　守り↑' : ''}</span></div><div class="btn" data-k="${x.k}" data-g="${x.g ? 1 : 0}">食べる</div></div>`; }).join('') || '<div class="p">料理を持っていない。店で作った料理は倉庫やカバンから食べられる。</div>');
+      return `<div class="row">${dishIcHTML(x.k, U * 10, x.g)}<div class="t"><b>${x.g ? '金色の' : ''}${dishInfo(x.k).name}${!plSt().ate[x.k] && plSt().an < 100 ? ' <span style="color:#e8c060;font-weight:normal">✨初めて</span>' : ''} ×${x.n}</b><span>体力+${e.hp * m}　気力+${e.st * m}${e.atk ? '　攻撃↑' : ''}${e.mine ? '　採掘↑' : ''}${e.def ? '　守り↑' : ''}</span></div><div class="btn" data-k="${x.k}" data-g="${x.g ? 1 : 0}">食べる</div></div>`; }).join('') || '<div class="p">料理を持っていない。店で作った料理は倉庫やカバンから食べられる。</div>');
   modal('料理を食べる', html, 'eat');
   bind('[data-k]', d => { const g = d.g === '1'; if (!takeDish(d.k, g, 1)) return; const e = EATFX(dishTaste(d.k)), m = g ? 2 : 1;
-    M.hp = Math.min(M.hpMax, M.hp + e.hp * m); M.st = Math.min(M.stMax, M.st + e.st * m);
+    plAte(d.k); M.hp = Math.min(M.hpMax, M.hp + e.hp * m); M.st = Math.min(M.stMax, M.st + e.st * m);
     for (const k of ['atk','mine','def']) if (e[k]) M.buff[k] = S.t + 60 * m * buffDurMul();
     if (ULT_KEYS.has(d.k)) { M.buff.ult = S.t + 300 * buffDurMul(); M.hp = M.hpMax; M.st = M.stMax; toast('👑 究極の料理の力！ 5分間、攻撃×1.5・受けるダメージ×0.7・体力回復', 3500); }
     sfx('ok'); floatAt(player.x, player.y - 22, `体力+${e.hp * m} 気力+${e.st * m}`, 'info'); openEat(); });
