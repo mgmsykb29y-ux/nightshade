@@ -605,7 +605,7 @@ function unlockFeature(k, quiet) {
 // ====================================================== state
 function fresh() {
   const s = {
-    v:1, gv:11, gold:600, rep:20, t:8*60, last:Date.now(),
+    v:1, gv:11, nbv:2, gold:600, rep:20, t:8*60, last:Date.now(),
     inv:{egg:4, rice:4, salt:4, oil:2, aji:2, tomato:2, onion:2}, invG:{}, seeds:{},
     dish:{}, dishG:{}, creative:{},
     known:{i:{}, r:{}}, menu:{},
@@ -626,6 +626,7 @@ function fresh() {
 }
 let S = fresh();
 function fixState() {
+  if (!S.nbv) { S.nb = {}; S.nbv = 2; }   // v0.52.3：客の種類で食い違っていた値段の記録をやり直す
   if (S.title === '灯守') S.title = '宵闇亭の二代目';
   if (S.unl && S.unl.quality && !S.unl.ach) S.unl.ach = 1;
   if (S.duelS && S.duelS.runs > 0 && S.duelS.lesson === undefined) S.duelS.lesson = 1;
@@ -1007,6 +1008,11 @@ function reaction(price, v) { const r = price / v; return r <= .85 ? 'cheap' : r
 function nbRecord(key, g, price, re) {
   const k = key + (g ? '*' : ''); const n = S.nb[k] || (S.nb[k] = {});
   if (re === 'no') n.no = Math.min(n.no || 1e9, price); else n[re] = Math.max(n[re] || 0, price);
+  // 境目は 安い＜ちょうど＜高い＜高すぎ の順になるはず。食い違う古い記録は消す
+  if (re === 'cheap') { for (const q of ['fair', 'pricey']) if (n[q] && n[q] <= price) delete n[q]; if (n.no && n.no <= price) delete n.no; }
+  if (re === 'fair') { if (n.cheap && n.cheap >= price) delete n.cheap; if (n.pricey && n.pricey <= price) delete n.pricey; if (n.no && n.no <= price) delete n.no; }
+  if (re === 'pricey') { for (const q of ['cheap', 'fair']) if (n[q] && n[q] >= price) delete n[q]; if (n.no && n.no <= price) delete n.no; }
+  if (re === 'no') for (const q of ['cheap', 'fair', 'pricey']) if (n[q] && n[q] >= price) delete n[q];
 }
 function buyMarket(id, n) { const g = ING[INGI[id]]; const cost = g.src[1] * n; if (S.gold < cost) return false; S.gold -= cost; withQ(1, () => add(S.inv, id, n)); S.known.i[id] = true; return true; }
 function canCook(r, autoBuy) {
@@ -1289,7 +1295,7 @@ function step(dt, vis) {
     const wb = S.shelfWare && S.shelfWare[i] ? (WARES.find(w => w.id === S.shelfWare[i]) || {bonus:0}).bonus : 0;
     const v = dval(s.key, s.g) * outfitValMul() * ct.b * (dm ? 1.25 * (perkOn('ryuka') ? 1.1 : 1) : 1) * (S.fac.terrace && inSeasonDish(s.key) ? 1 + .12 * S.fac.terrace : 1) * (S.fac.courtyard && !isNightHm() && !wxOn('rain') && !wxOn('storm') && dishInfo(s.key).ings.some(id => ING[INGI[id]].src[0] === 'seed') ? 1 + .1 * S.fac.courtyard : 1) * decorValMul(s.key, s.g) * ((S.fac.bar || 0) >= 2 && isNightHm() && ['焼く', '揚げる'].includes(dishInfo(s.key).method) ? 1.15 : 1) * (1 + dishTaste(s.key)[fav] * .03) * (1 + wb), re = reaction(s.price, v);
     const buy = re !== 'no';
-    nbRecord(s.key, s.g, s.price, re);
+    nbRecord(s.key, s.g, Math.round(s.price / (ct.b * (dm ? 1.25 * (perkOn('ryuka') ? 1.1 : 1) : 1))), re);   // v0.52.3：客の種類と流行の分をならして記録
     { const rg = repGain({cheap:.6, fair:.3, pricey:-.4, no:-.8}[re]); S.rep = Math.max(0, Math.min(100, S.rep + (rg > 0 ? rg * repDim() * decorRep() * townRepMul() * (S.staff.clerk && perkN('clerk', 'idol') ? 1.2 : 1) : rg))); }
     if (buy && s.key[0] === 'c' && S.creative[s.key] && S.creative[s.key].ai) S.creative[s.key].sold = (S.creative[s.key].sold || 0) + 1;
     { const dy = dayTrack(); dy.cust++; if (buy) { dy.buy++; dy.earned += s.price; dy.dish[s.key] = (dy.dish[s.key] || 0) + 1; } }
@@ -2061,7 +2067,7 @@ function nbHTML(key, g) {
   if (n.fair) p.push(`<span>🙂 ちょうど ≤${fmt(n.fair)}G</span>`);
   if (n.pricey) p.push(`<span>😓 高い ≤${fmt(n.pricey)}G</span>`);
   if (n.no) p.push(`<span>😠 高すぎ ≥${fmt(n.no)}G</span>`);
-  return p.length ? `<div class="note">${p.join('')}</div>` : `<div class="p" style="text-align:center">まだ客の反応の記録がない。売ってみて表情を見よう。</div>`;
+  return p.length ? `<div class="note">${p.join('')}</div><div class="p" style="text-align:center;color:var(--sub);font-size:.85em">ふつうの客の目安（お金持ちの客・流行の料理はもっと高くても買う）</div>` : `<div class="p" style="text-align:center">まだ客の反応の記録がない。売ってみて表情を見よう。</div>`;
 }
 function renderShelf() { syncShelf();
   const s = S.shelf[shelfSel];
