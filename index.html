@@ -1655,7 +1655,8 @@ function chipAct(c) {
   if (c === 'buzz') return toast('評論家の記事が話題になり、客が1.3倍来ている。');
   if (c === 'sell') {
     if (!S.staff.clerk) return toast('自動販売には<b>店員</b>が必要です。「従業員」から雇えます。');
-    S.auto.sell = !S.auto.sell; toast(S.auto.sell ? '自動販売 ON：店員が料理を並べ、値段も決めます' : '自動販売 OFF：棚と値段は自分で管理');
+    if (S.auto.sell && !(window.__sellArm > Date.now())) { window.__sellArm = Date.now() + 2500; return toast('もう一度押すと<b>自動販売をOFF</b>にする（店員が棚に並べなくなる）', 2500); }
+    window.__sellArm = 0; S.auto.sell = !S.auto.sell; toast(S.auto.sell ? '自動販売 ON：店員が料理を並べ、値段も決めます' : '自動販売 OFF：棚と値段は自分で管理。上の「自動OFF」を押すとONに戻る');
   } else if (c === 'mode') {
     S.auto.mode = {normal:'strong', strong:'cheap', cheap:'normal'}[S.auto.mode];
     toast({strong:'強気：単価は上がるが客は減り、評判も下がりやすい', normal:'通常：適正よりわずかに高め', cheap:'安売り：客と評判が増える'}[S.auto.mode]);
