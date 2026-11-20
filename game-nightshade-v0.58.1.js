@@ -480,7 +480,7 @@ const SCENES = {
     {id:'trough', lb:'えさ箱にえさを入れる', r:[58,306,86,322], st:[72,328], act:() => openFeed()},
     {id:'bee', lb:'養蜂箱', r:[88,146,102,162], st:[96,166], act:() => S.fac.bee ? toast(`養蜂箱 Lv${S.fac.bee}：蜂蜜を自動で集めている。`) : lockedMsg('bee')},
     {id:'gh', lb:'温室', r:[6,168,62,216], st:[72,192], act:() => S.fac.greenhouse ? toast('温室：幻想の作物の種が市場で買えるようになった。') : lockedMsg('greenhouse')},
-    {id:'orchard', lb:'果樹園', r:[82,168,138,216], st:[74,192], act:() => S.fac.orchard ? toast('果樹を調べると苗木を植えたり収穫したりできる。') : lockedMsg('orchard')},
+    {id:'orchard', lb:'果樹園', r:[104,152,138,166], st:[74,192], act:() => S.fac.orchard ? openOrchard() : lockedMsg('orchard')},
   ]},
 };
 
@@ -1447,15 +1447,19 @@ function openForge(a) {
   const M = mineState(); if (!S.wares) S.wares = {};
   let html = `<div class="btn big" data-a="talk">話す</div><div style="display:flex;gap:3px;margin-top:3px"><div class="btn big grn" data-a="wf" style="flex:1">⚔ 武器を作る</div>${gearSt().list.some(g => !isAcc(g)) ? '<div class="btn big" data-a="wk" style="flex:1">🔨 工房</div>' : ''}${unl('arms') ? '<div class="btn big blu" data-a="ench" style="flex:1">💎 付与</div>' : ''}<div class="btn big" data-a="gear" style="flex:1">装備</div></div><div class="h">ツルハシの強化（1段階上に作り直す。耐久も満タンに）</div>`;
   const ups = S.toolInv.filter(t => ['pick'].includes(TOOLI[t.id].kind) && TOOLI[t.id].tier < 8);
-  html += ups.map(t => { const tl = TOOLI[t.id], nx = tl.tier + 1, g = GEAR[nx - 1], need = {[g.unlock]: 3, coal: 2 + nx}, fee = Math.round(g.price * .35), lock = !M.ever[g.unlock];
+  html += (ups.length ? '' : '<div class="p">強化できるツルハシがない。</div>') + ups.map(t => { const tl = TOOLI[t.id], nx = tl.tier + 1, g = GEAR[nx - 1], need = {[g.unlock]: 3, coal: 2 + nx}, fee = Math.round(g.price * .35), lock = !M.ever[g.unlock];
     return `<div class="row">${icHTML(tl.icon, U * 10, 'atlas', null, 't:' + tl.id)}<div class="t"><b>${tl.name} → ${g.name}</b><span>${lock ? `🔒 ${ingName(g.unlock)}を掘り出すと強化できる` : needHTML(need) + `　${fmt(fee)}G`}</span></div>${lock ? '' : `<div class="btn ${needOk(need) && S.gold >= fee ? '' : 'dis'}" data-up="${t.uid}">強化</div>`}</div>`; }).join('') || '<div class="p">強化できるツルハシを持っていない。</div>';
   { const cur = S.armor || 0, nt = cur + 1;
     html += `<div class="h">防具（迷宮で魔物から受けるダメージが減る）</div><div class="row"><div class="t"><b>今の防具：${ARMOR_N[cur]}${cur ? `（ダメージ -${Math.round(ARMOR_DEF[cur] * 100)}%）` : ''}</b>` + (nt <= 8 ? (() => { const need = armorNeed(nt), fee = armorFee(nt), lock = nt > 1 && !M.ever[GEAR[nt - 1].unlock];
       return `<span>${ARMOR_N[nt]}（ダメージ -${Math.round(ARMOR_DEF[nt] * 100)}%）　${lock ? `🔒 ${ingName(GEAR[nt - 1].unlock)}を掘り出すと作れる（${srcHint(GEAR[nt - 1].unlock)}）` : needHTML(need) + '　' + fmt(fee) + 'G'}</span></div>${lock ? '' : `<div class="btn ${needOk(need) && S.gold >= fee ? '' : 'dis'}" data-arm="${nt}">作る</div>`}</div>`; })() : '<span>最高の防具だ</span></div></div>'); }
   html += forgeDeepHTML();
   html += `<div class="h">宝石の器（陳列棚に置くと、その棚の料理が高くても売れる）</div>` + WARES.map(w => `<div class="row"><div class="t"><b>${w.name}（+${w.bonus * 100}%）　所持 ${S.wares[w.id] || 0}</b><span>${needHTML(w.need)}　${fmt(w.cost)}G</span></div><div class="btn ${needOk(w.need) && S.gold >= w.cost ? '' : 'dis'}" data-w="${w.id}">作る</div></div>`).join('');
-  html = html.replace('<div class="h">防具', forgeRepairHTML() + forgeOreHTML() + '<div class="h">防具');
-  modal('鍛冶屋ガルド', html, 'forge'); bindForgeDeep(a); bindForgeRepair(a);
+  html = html.replace('<div class="h">防具', forgeRepairHTML() + '<div class="h">🪨 鉱石を買う</div>' + forgeOreHTML() + '<div class="h">防具');
+  // v0.58.1：見出しごとに開け閉めできるように（開いている所は覚えておく）
+  { const parts = html.split('<div class="h">'), top = parts.shift(), op = S.ui.fopen || {};
+    html = top + parts.map((p, i) => { const j = p.indexOf('</div>'), t = p.slice(0, j), body = p.slice(j + 6), key = t.replace(/[（(].*$/, '').trim(); return `<details class="fsec" data-fs="${key}" ${op[key] ? 'open' : ''}><summary class="h">${t}</summary>${body}</details>`; }).join(''); }
+  modal('鍛冶屋ガルド', html, 'forge');
+  document.querySelectorAll('details.fsec').forEach(e => e.addEventListener('toggle', () => { S.ui.fopen = S.ui.fopen || {}; S.ui.fopen[e.dataset.fs] = e.open; })); bindForgeDeep(a); bindForgeRepair(a);
   bind('[data-a=talk]', () => { closeModal(); if (a) talk(a); else toast('ガルド「腹が減っては槌も振れん！ 用があるなら言ってくれ」'); });
   bind('[data-a=wf]', () => openWForge()); bind('[data-a=wk]', () => openWorks()); bind('[data-a=ench]', () => openEnchant()); bind('[data-a=gear]', () => openGear());
   bind('[data-arm]', d => { const t = +d.arm, need = armorNeed(t), fee = armorFee(t); if (!needOk(need) || S.gold < fee) return; for (const [k, n] of Object.entries(need)) takeIng(k, false, n); S.gold -= fee; S.armor = t; sfx('ok'); tut('armor'); toast(`ガルド「${ARMOR_N[t]}だ。これで少しは無茶ができるぞ」`, 3000); openForge(a); });
@@ -1472,6 +1476,14 @@ function openTrap(loc) {
     <div class="btn big ${S.trapItems > 0 && tp.n < 3 ? 'grn' : 'dis'}" data-a="put">罠を仕掛ける</div>`;
   modal('かご罠（' + name + '）', html, 'trap');
   bind('[data-a=put]', () => { if (S.trapItems <= 0 || tp.n >= 3) return; S.trapItems--; tp.n++; sfx('pop'); dirty = true; openTrap(loc); });
+}
+// v0.58.1：果樹園の看板から、4本の木をまとめて見る・植える・収穫する
+function openOrchard() {
+  const rows = [0, 1, 2, 3].map(i => { const t = S.trees[i]; if (!t) return `<div class="row"><div class="t"><b>${i + 1}本目：空き</b><span>苗木を選んで植える</span></div><div class="btn grn" data-ot="${i}">植える</div></div>`;
+    const g = ING[INGI[t.id]], grown = t.g >= 1200, left = grown ? g.src[2] - (t.ft || 0) : 1200 - t.g;
+    return `<div class="row">${ingIc(t.id, U * 10, false, true)}<div class="t"><b>${i + 1}本目：${g.name}の木</b><span>${t.fruit ? `実が${t.fruit}個なっている` : grown ? `次の実まで あと${Math.ceil(left / 60)}分` : `育成中 あと${Math.ceil(left / 60)}分`}</span></div>${t.fruit ? `<div class="btn grn" data-ot="${i}">収穫</div>` : ''}</div>`; }).join('');
+  modal('果樹園', `<div class="p">苗木を植えると約20分で育ち、その後は何度でも実る（1本に最大3個たまる）。農夫がいると自動で収穫する。畑の右下の4つの盛り土をタップしても同じ。</div>` + rows, 'orchard');
+  bind('[data-ot]', d => { const i = +d.ot; if (S.trees[i] && S.trees[i].fruit) { tapTree(i); openOrchard(); } else tapTree(i); });
 }
 function tapTree(i) {
   if (!S.fac.orchard) return lockedMsg('orchard');
@@ -2290,8 +2302,8 @@ function openMarket() {
   bind('[data-wbuy]', () => { if (S.gold < shortC) return; for (const [id, n] of short) buyMarket(id, n); sfx('coin'); toast('作るリストの足りない食材をまとめて買った（倉庫へ）'); openMarket(); });
 }
 // 買う数（−＋と、1・5・10）
-function mkNHTML() { return `<div style="display:flex;align-items:center;gap:${U * .8}px;margin-bottom:${U * 1.4}px;flex-wrap:wrap"><span>買う数</span><div class="btn" data-mn="-1">−</div><b style="min-width:${U * 8}px;text-align:center;font-size:1.2em">${mkN}</b><div class="btn" data-mn="1">＋</div>${[1, 5, 10, 20].map(n => `<div class="btn ${mkN === n ? 'grn' : ''}" data-ms="${n}">${n}</div>`).join('')}</div>`; }
-function bindMkN(re) { bind('[data-mn]', d => { mkN = Math.max(1, Math.min(99, mkN + +d.mn)); re(); }); bind('[data-ms]', d => { mkN = +d.ms; re(); }); }
+function mkNHTML() { return `<div style="display:flex;align-items:center;gap:${U * .8}px;margin-bottom:${U * 1.4}px;flex-wrap:wrap"><span>買う数</span><div class="btn" data-mn="-10">−10</div><div class="btn" data-mn="-1">−</div><b style="min-width:${U * 8}px;text-align:center;font-size:1.2em">${mkN}</b><div class="btn" data-mn="1">＋</div><div class="btn" data-mn="10">＋10</div>${[1, 10, 50, 100].map(n => `<div class="btn ${mkN === n ? 'grn' : ''}" data-ms="${n}">${n}</div>`).join('')}</div>`; }
+function bindMkN(re) { bind('[data-mn]', d => { mkN = Math.max(1, Math.min(999, mkN + +d.mn)); re(); }); bind('[data-ms]', d => { mkN = +d.ms; re(); }); }
 
 // v0.54 朝の魚市（6〜10時）：日替わりで魚・貝・エビなどが5品。値打ち×1.5（釣るほうが安い）
 const FM_POOL = ['ayu','trout','catfish','eel','carp','smelt','aji','saba','salmon','tai','tuna','squid','shrimp','octopus','scallop','iwashi','sanma','buri','hirame','katsuo','uni','asari','crab','oyster','sazae','wakame','river_shrimp','sawagani'].filter(id => INGI[id] != null);
@@ -5381,9 +5393,10 @@ function forgeRepairHTML() {
 const oreBuyP = k => Math.max(4, Math.round(ING[INGI[k]].value * 1.6));
 function forgeOreHTML() {
   const M = mineState(), ev = ROCKS.filter(k => k !== 'stone' && (k === 'coal' || (M.ever && M.ever[k])));
-  return `<div class="h">⛏ 鉱石を買う（一度掘った物だけ。掘るより高め）</div>` + ev.map(k => { const p = oreBuyP(k); return `<div class="row">${ingIc(k, U * 9)}<div class="t"><b>${ingName(k)}</b><span>${p}G　所持 ${haveIng(k)}</span></div><div class="btn ${S.gold >= p ? '' : 'dis'}" data-ob="${k}:1">×1</div><div class="btn ${S.gold >= p * 5 ? '' : 'dis'}" data-ob="${k}:5">×5</div></div>`; }).join('');
+  return `<div class="p">一度掘った鉱石だけ。掘るより高め（石炭はいつでも）。</div>` + mkNHTML() + ev.map(k => { const p = oreBuyP(k); return `<div class="row">${ingIc(k, U * 9)}<div class="t"><b>${ingName(k)}</b><span>${p}G　所持 ${haveIng(k)}</span></div><div class="btn ${S.gold >= p * mkN ? '' : 'dis'}" data-ob="${k}:${mkN}">×${mkN}<br>${fmt(p * mkN)}G</div></div>`; }).join('');
 }
 function bindForgeRepair(a) {
+  bindMkN(() => openForge(a));
   bind('[data-ob]', d => { const [k, n] = d.ob.split(':'), c = oreBuyP(k) * +n; if (S.gold < c) return; S.gold -= c; add(S.inv, k, +n); S.known.i[k] = true; sfx('coin'); dirty = true; toast(`${ingName(k)}×${n}を買った（倉庫へ）`); openForge(a); });
   bind('[data-fr]', d => { const list = d.fr === 'all' ? S.toolInv.filter(t => t.dur < TOOL_DUR[t.id]) : [S.toolInv.find(t => t.uid === +d.fr)].filter(Boolean);
     const c = list.reduce((x, t) => x + repairCost(t), 0); if (!list.length || S.gold < c) return; S.gold -= c; list.forEach(t => { const br = t.dur <= 0; t.dur = TOOL_DUR[t.id]; if (br) giveTool(t.uid); });
