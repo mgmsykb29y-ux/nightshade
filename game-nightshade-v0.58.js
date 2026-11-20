@@ -73,7 +73,7 @@ const GOALS = [
   {t:'森と浜で採集しよう', h:'店の外の道を下へ。光っている物を拾う', chk:s => (s.stat.foraged || 0) >= 1, r:120, un:['season']},
   {t:'レシピを10種類見つけよう', h:'組み合わせと調理法を変えて試そう。市場の「本」も役立つ', chk:s => Object.keys(s.known.r).length >= 10, r:300, un:['quality', 'ach']},
   {t:'施設を強化しよう', h:'下の「施設」から', chk:s => ['plots','shelf','hearth','sign'].some(k => s.fac[k] > FAC[k].start), r:200, un:['merchant', 'ranch']},
-  {t:'行商人から買い物しよう', h:'週に2回（火曜と土曜）、店の外に行商人の荷馬車が来る', chk:s => (s.stat.merchant || 0) >= 1, r:200, un:['regulars']},
+  {t:'行商人から買い物しよう', h:'週に2回（火曜と土曜）の10時〜22時、広場の右下に行商人の荷馬車が来る', chk:s => (s.stat.merchant || 0) >= 1, r:200, un:['regulars']},
   {t:'鶏小屋か牛舎を建てよう', h:'「施設」から。えさ箱に作物を入れると卵や牛乳がとれる', chk:s => s.fac.coop > 0 || s.fac.barn > 0, r:300, un:['machines', 'breed']},
   {t:'加工器具を1つ設置しよう', h:'キッチンの器具置き場（左右の壁ぎわ）を調べる', chk:s => Object.values(s.mach || {}).some(m => m.lv > 0), r:300, un:['mine']},
   {t:'地下迷宮に入ってみよう', h:'店の外の古井戸から。ツルハシは市場の「道具」で買える', chk:s => s.mine && s.mine.max >= 1, r:150, un:['story']},
@@ -97,7 +97,7 @@ const GOALS = [
   {t:'宿屋を開こう', h:'「店の拡張」から。2階の客席Lv2が必要', chk:s => (s.fac.inn || 0) > 0, r:3000, un:['lottery']},
   {t:'福引きを引いてみよう', h:'広場の泉の左下にある、福引きの露店で', chk:s => (s.stat.fuku || 0) >= 1, r:1000, un:['dice']},
   {t:'魔族とのサイコロで1回勝とう', h:'裏営業のあいだ、店内の画面上「🎲サイコロ」から', chk:s => (s.stat.diceWin || 0) >= 1, r:1500, un:['auction']},
-  {t:'行商人の競りで落札しよう', h:'毎週土曜、行商人の荷馬車で（暦にも載る）', chk:s => (s.stat.auction || 0) >= 1, r:2000, un:['branch']},
+  {t:'行商人の競りで落札しよう', h:'毎週土曜の10時〜22時、広場の右下に来る行商人の荷馬車で（暦にも載る）', chk:s => (s.stat.auction || 0) >= 1, r:2000, un:['branch']},
   {t:'となり町に支店を出そう', h:'「施設」タブの「となり町の支店」から', chk:s => s.branch && s.branch.lv >= 1, r:5000, un:['trade']},
   {t:'食材の相場で利益を出そう', h:'市場の「相場」タブ。安い日に買って、高い日に売る', chk:s => (s.stat.tradeWin || 0) >= 1, r:3000, un:['training']},
   {t:'従業員を修行の旅に出そう', h:'Lv10の従業員を「従業員」タブから', chk:s => (s.stat.train || 0) >= 1, r:5000, un:['rival']},
@@ -930,7 +930,7 @@ function step(dt, vis) {
     while (S.tm.fisher <= 0) { S.tm.fisher += 50; eXp('fisher'); const f = fishRoll('pond', perkN('fisher', 'rare') ? 1.5 : 0); const g = Math.random() < .03 + (perkN('fisher', 'gold') ? .05 : 0); withQ(perkN('fisher', 'big') ? 2 : 1.5, () => add(g ? S.invG : S.inv, f.id, 1)); S.known.i[f.id] = true; rep_.fish = (rep_.fish || 0) + 1; if (vis && scene === 'farm') floatAt(40, 120, f.name + (g ? '★' : ''), 'info'); }
   }
   if (S.staff.miner && S.mine && S.mine.max) { S.tm.mine = (S.tm.mine === undefined ? 70 : S.tm.mine) - dt * eSum('miner');
-    while (S.tm.mine <= 0) { S.tm.mine += 70; eXp('miner'); const L = LAYERS[layerOf(perkN('miner', 'deep') ? S.mine.max : 1 + Math.floor(Math.random() * S.mine.max))]; const ores = Object.entries(L.rocks).filter(([k]) => k !== 'stone').map(([k, w]) => ({k, w: w * (perkN('miner', 'gem') && ING[INGI[k]].src[0] === 'ore' && /amethyst|ruby|sapphire|emerald|diamond|moonstone|yasho|hoshikui/.test(k) ? 2 : 1)}));
+    while (S.tm.mine <= 0) { S.tm.mine += 70; eXp('miner'); const L = LAYERS[layerOf(perkN('miner', 'deep') ? S.mine.max : 1 + Math.floor(Math.random() * S.mine.max))]; if (S.mineAim && S.mine.ever && S.mine.ever[S.mineAim] && Math.random() < .7) { const o = S.mineAim; add(S.inv, o, 1 + (perkN('miner', 'double') && Math.random() < .15 ? 1 : 0)); rep_.ore = (rep_.ore || 0) + 1; continue; } const ores = Object.entries(shallowMix(L, LAYERS.indexOf(L))).filter(([k]) => k !== 'stone').map(([k, w]) => ({k, w: w * (perkN('miner', 'gem') && ING[INGI[k]].src[0] === 'ore' && /amethyst|ruby|sapphire|emerald|diamond|moonstone|yasho|hoshikui/.test(k) ? 2 : 1)}));
       const o = wpick(ores).k; add(S.inv, o, 1 + (perkN('miner', 'double') && Math.random() < .15 ? 1 : 0)); S.known.i[o] = true; rep_.ore = (rep_.ore || 0) + 1; } }
   if (S.fac.bee) { S.tm.bee -= dt * S.fac.bee; while (S.tm.bee <= 0) { S.tm.bee += 150; add(S.inv, 'honey', 1); S.known.i.honey = true; } }
   // shop
@@ -1454,7 +1454,7 @@ function openForge(a) {
       return `<span>${ARMOR_N[nt]}（ダメージ -${Math.round(ARMOR_DEF[nt] * 100)}%）　${lock ? `🔒 ${ingName(GEAR[nt - 1].unlock)}を掘り出すと作れる（${srcHint(GEAR[nt - 1].unlock)}）` : needHTML(need) + '　' + fmt(fee) + 'G'}</span></div>${lock ? '' : `<div class="btn ${needOk(need) && S.gold >= fee ? '' : 'dis'}" data-arm="${nt}">作る</div>`}</div>`; })() : '<span>最高の防具だ</span></div></div>'); }
   html += forgeDeepHTML();
   html += `<div class="h">宝石の器（陳列棚に置くと、その棚の料理が高くても売れる）</div>` + WARES.map(w => `<div class="row"><div class="t"><b>${w.name}（+${w.bonus * 100}%）　所持 ${S.wares[w.id] || 0}</b><span>${needHTML(w.need)}　${fmt(w.cost)}G</span></div><div class="btn ${needOk(w.need) && S.gold >= w.cost ? '' : 'dis'}" data-w="${w.id}">作る</div></div>`).join('');
-  html = html.replace('<div class="h">防具', forgeRepairHTML() + '<div class="h">防具');
+  html = html.replace('<div class="h">防具', forgeRepairHTML() + forgeOreHTML() + '<div class="h">防具');
   modal('鍛冶屋ガルド', html, 'forge'); bindForgeDeep(a); bindForgeRepair(a);
   bind('[data-a=talk]', () => { closeModal(); if (a) talk(a); else toast('ガルド「腹が減っては槌も振れん！ 用があるなら言ってくれ」'); });
   bind('[data-a=wf]', () => openWForge()); bind('[data-a=wk]', () => openWorks()); bind('[data-a=ench]', () => openEnchant()); bind('[data-a=gear]', () => openGear());
@@ -2218,6 +2218,8 @@ function openStaff() {
     const idle = n && k === 'cook' && S.idle && S.idle.cook ? `<span style="color:#d8806a">⚠ 待機中：${S.idle.cook}</span>` : n && k === 'clerk' && !S.auto.sell ? '<span style="color:#d8806a">⚠ 自動販売がOFF</span>' : '';
     html += `<div class="row">${charHTML(s.icon, U * 13)}<div class="t"><b>${s.name}　${n}人</b><span>${s.desc}</span>${idle}</div>${mx ? '<div class="btn dis">満員</div>' : `<div class="btn ${S.gold >= c ? '' : 'dis'}" data-k="${k}">雇う<br>${fmt(c)}G</div>`}</div>`;
   }
+  if (S.staff.miner && S.mine && S.mine.ever) { const ev = ROCKS.filter(k => k !== 'stone' && S.mine.ever[k]);
+    html += `<div class="h">採掘人に頼む鉱石</div><div class="p">選んだ鉱石を多めに（7割）掘ってくる。「おまかせ」は行ったことのある階からいろいろ。</div><div style="display:flex;flex-wrap:wrap;gap:${U * .6}px;margin-bottom:${U * 1.4}px"><div class="btn ${!S.mineAim ? 'grn' : ''}" data-aim="">おまかせ</div>${ev.map(k => `<div class="btn ${S.mineAim === k ? 'grn' : ''}" data-aim="${k}">${ingName(k)}</div>`).join('')}</div>`; }
   html += `<div class="h">働き方</div>
    <div class="row"><div class="t"><b>自動仕入れ</b><span>料理人・農夫が足りない材料（市場の品）や種を自動で買う</span></div><div class="sw ${S.auto.buy ? 'on' : ''}" data-a="buy"><i></i></div></div>
    <div class="row"><div class="t"><b>自動販売</b><span>店員が料理を棚に並べ、値段を決める（店員が必要）</span></div><div class="sw ${S.auto.sell ? 'on' : ''}" data-a="sell"><i></i></div></div>
@@ -2225,6 +2227,7 @@ function openStaff() {
    <div class="p">料理人に作らせる料理は「レシピ」タブのスイッチで選べます。</div>`;
   html += '<div class="h">従業員のレベル</div>' + staffHTML();
   modal('従業員', html, 'staff');
+  bind('[data-aim]', d => { S.mineAim = d.aim || null; dirty = true; toast(d.aim ? `採掘人は${ingName(d.aim)}を多めに掘る` : '採掘人はおまかせで掘る'); openStaff(); });
   bind('[data-meal]', () => { let best = null; for (const k in S.dish) if (S.dish[k] > 0 && (!best || dval(k) < dval(best))) best = k; if (!best) return toast('倉庫に料理がない'); add(S.dish, best, -1); S.mealT = S.t + 1800; for (const k in STAFF) for (let i = 0; i < S.staff[k]; i++) eXp(k, i, 3); sfx('ok'); toast(`まかないに${dishInfo(best).name}をふるまった。みんな元気いっぱい！`); openStaff(); });
   bindTrain();
   bind('[data-kp]', d => { S.keepN = +d.kp; dirty = true; openStaff(); });
@@ -4697,7 +4700,7 @@ const MAN = [
   {k:'mach', t:'加工器具', c:() => unl('machines'), h:() => li(['キッチンの左右の壁ぎわに置く。予約しておけば留守中も動き、完成品は倉庫へ。強化すると速く、作れる物が増える。', '<b>市場で買うより、自分で作った方が必ず安い</b>（加工器具の画面に、市場の値段と自作の値段が出る）。'])
     + MACH.filter(m => m.slot[0] !== 'W' || S.fac.workshop).map(m => `<div class="p" style="margin-top:3px"><b>${m.name}</b>（${fmt(m.price)}G）</div>` + tbl(['作る物', '材料', '時間'], m.recipes.map(r => [ingName(r.out) + '×' + r.n + (r.lv > 1 ? `（Lv${r.lv}）` : ''), r.ins.map(ingName).join('＋'), Math.round(r.sec / 60) + '分']))).join('')},
   {k:'breed', t:'品種改良', c:() => unl('breed'), h:() => li(['農場の道具小屋の交配台で、2つの種を掛け合わせると新しい作物ができる。', '組み合わせは図鑑で確かめられる。Lvで同時に交配できる数と速さが上がる。'])},
-  {k:'mine', t:'地下迷宮', c:() => unl('mine'), h:() => li([
+  {k:'mine', t:'地下迷宮', c:() => unl('mine'), h:() => li(['深い層の岩からも、石炭（どこでも多め）とそれまでの層の鉱石がときどき出る。', '一度掘った鉱石は、鍛冶屋で買うこともできる（掘るより高め、石炭はいつでも）。採掘人には「頼む鉱石」を指定できる（従業員タブ）。', 
     '店の外の古井戸から入る。ツルハシと剣は市場の「道具」。5階ごとに昇降機があり、次からそこから始められる。',
     '<b>岩はタップすると、そこへ行ってすぐ壊せる</b>（気力を使う。硬い岩は上のツルハシが必要）。壊していると階段が見つかる。',
     '魔物はタップで攻撃。体力が0になると、その回に取った物を半分なくして外へ。料理を食べると回復（持ち物の料理をタップ）。辛い料理は攻撃↑、酸っぱい料理は防御↑。',
@@ -5375,7 +5378,13 @@ function forgeRepairHTML() {
     return `<div class="row">${icHTML(tl.icon, U * 10, 'atlas', null, 't:' + tl.id)}<div class="t"><b>${tl.name}${t.dur <= 0 ? ' <span style="color:#e88">💥壊れている</span>' : ''}</b><span>耐久 ${t.dur}/${mx}　新品 ${fmt(tl.price || 80)}G</span></div><div class="btn ${S.gold >= c ? 'grn' : 'dis'}" data-fr="${t.uid}">${fmt(c)}G</div></div>`; }).join('')
     + (ts.length > 1 ? `<div class="btn big ${S.gold >= all ? 'grn' : 'dis'}" data-fr="all" style="margin-bottom:${U * 1.4}px">全部修理する（${fmt(all)}G）</div>` : '') : '<div class="p">修理が必要な道具はない。</div>');
 }
+const oreBuyP = k => Math.max(4, Math.round(ING[INGI[k]].value * 1.6));
+function forgeOreHTML() {
+  const M = mineState(), ev = ROCKS.filter(k => k !== 'stone' && (k === 'coal' || (M.ever && M.ever[k])));
+  return `<div class="h">⛏ 鉱石を買う（一度掘った物だけ。掘るより高め）</div>` + ev.map(k => { const p = oreBuyP(k); return `<div class="row">${ingIc(k, U * 9)}<div class="t"><b>${ingName(k)}</b><span>${p}G　所持 ${haveIng(k)}</span></div><div class="btn ${S.gold >= p ? '' : 'dis'}" data-ob="${k}:1">×1</div><div class="btn ${S.gold >= p * 5 ? '' : 'dis'}" data-ob="${k}:5">×5</div></div>`; }).join('');
+}
 function bindForgeRepair(a) {
+  bind('[data-ob]', d => { const [k, n] = d.ob.split(':'), c = oreBuyP(k) * +n; if (S.gold < c) return; S.gold -= c; add(S.inv, k, +n); S.known.i[k] = true; sfx('coin'); dirty = true; toast(`${ingName(k)}×${n}を買った（倉庫へ）`); openForge(a); });
   bind('[data-fr]', d => { const list = d.fr === 'all' ? S.toolInv.filter(t => t.dur < TOOL_DUR[t.id]) : [S.toolInv.find(t => t.uid === +d.fr)].filter(Boolean);
     const c = list.reduce((x, t) => x + repairCost(t), 0); if (!list.length || S.gold < c) return; S.gold -= c; list.forEach(t => { const br = t.dur <= 0; t.dur = TOOL_DUR[t.id]; if (br) giveTool(t.uid); });
     sfx('ok'); dirty = true; renderHot(); toast(`ガルド「ほれ、新品同様だ」（${fmt(c)}G）`); openForge(a); });
@@ -6136,13 +6145,15 @@ function arenaEnd(won) {
   setTimeout(() => popStory(`<div class="tth">🏟 ${won ? '勝利！' : '闘技場から退場'}</div><div class="ttx">${a.boss ? (won ? `${MONT[DGD[a.boss].boss].n}（強化版）を倒した！` : 'ボスに敗れた……') : `${cleared}波を勝ち抜いた。`}<br>闘技場メダル +${md}${gold ? `　${fmt(gold)}G` : ''}${lines.length ? '<br>' + lines.join('<br>') : ''}<br>今週の最高記録：${A_.best}波</div>`), 500);
   dirty = true;
 }
-const AR_SHOP = [['scroll', 3, 3, '帰還の巻物×3'], ['p_elixir', 1, 8, 'エリクサー'], ['p_heal2', 3, 4, '上級回復薬×3'], ['gem', 2, 6, '宝石の袋（ランダム×2）'], ['wbook', 1, 6, '訓練の書（装備中の種類の熟練度+60）'], ['hero', 1, 40, '英雄の武器（ランダム・今いちばん良い素材）']];
+const AR_SHOP_BASE = [['scroll', 3, 3, '帰還の巻物×3'], ['p_elixir', 1, 8, 'エリクサー'], ['p_heal2', 3, 4, '上級回復薬×3'], ['gem', 2, 6, '宝石の袋（ランダム×2）'], ['wbook', 1, 6, '訓練の書（装備中の種類の熟練度+60）'], ['hero', 1, 40, '英雄の武器（ランダム・今いちばん良い素材）']];
 function openArenaShop() {
+  const AR_SHOP = AR_SHOP_BASE.concat(Object.entries(PLC_RARE_C).map(([k, c]) => ['plc:' + k, 1, c, '飾り：' + PLCI[k].n + '（持っている ' + ((plcSt().own || {})[k] || 0) + '）']));
   const A_ = arSt();
   modal('闘技場メダルの交換所', `<div class="p">メダル：<b>${A_.medal}</b>枚</div>` + AR_SHOP.map(([id, n, c, lb], i) => `<div class="row"><div class="t"><b>${lb}</b><span>メダル${c}枚</span></div><div class="btn ${A_.medal >= c ? 'grn' : 'dis'}" data-as="${i}">交換</div></div>`).join(''), 'arshop');
   bind('[data-as]', d => { const [id, n, c, lb] = AR_SHOP[+d.as]; if (A_.medal < c) return; A_.medal -= c;
     if (id === 'gem') { for (let k = 0; k < n; k++) add(S.inv, pick(Object.keys(ENCH).slice(0, 6)), 1); }
     else if (id === 'wbook') { if (!wmType()) { A_.medal += c; return toast('武器を装備していない'); } wmXp(60); }
+    else if (id.startsWith('plc:')) { const P = plcSt(), k = id.slice(4); if ((P.own[k] || 0) >= PLC_COPY) { A_.medal += c; return toast('同じ飾りは3つまで'); } P.own[k] = (P.own[k] || 0) + 1; }
     else if (id === 'hero') { const M = mineState(), tiers = MAT_ORDER.map((m, k) => [MAT_ORE[m], k + 1]).filter(([o]) => M.ever[o]), t = tiers.length ? tiers[tiers.length - 1][1] : 1, w = pick(WEAP.filter(x => x.src === 'forge' && x.tier === t)); addGear(w.id, 3); }
     else { add(S.inv, id, n); S.known.i[id] = true; }
     sfx('coin'); dirty = true; toast(`🏅 ${lb}と交換した`); openArenaShop(); });
@@ -6377,6 +6388,8 @@ TOOLS.forEach(t => TOOLI[t.id] = t);
 const ROCKS = ['stone','copper','iron','coal','silver','amethyst','gold','ruby','sapphire','emerald','diamond','moonstone','meitetsu','yasho','hoshikui','naraku'];
 const ROCKREQ = {stone:1, copper:1, coal:1, iron:1, silver:2, amethyst:2, gold:2, ruby:3, sapphire:3, emerald:4, diamond:4, moonstone:5, meitetsu:5, yasho:6, hoshikui:7, naraku:7};
 const ROCKHP = {stone:2, copper:3, coal:3, iron:4, silver:5, amethyst:6, gold:7, ruby:8, sapphire:9, emerald:10, diamond:12, moonstone:12, meitetsu:15, yasho:18, hoshikui:22, naraku:26};
+// v0.58：深い階の岩からも、石炭（どこでも多め）とそれまでの層の鉱石が出る
+function shallowMix(L, li) { const r = {...L.rocks}; if (li > 0 && ROCKS.includes('coal')) { r.coal = Math.max(r.coal || 0, 10); for (let j = 0; j < li && j < LAYERS.length; j++) for (const k in LAYERS[j].rocks) if (k !== 'stone' && !r[k] && ROCKS.includes(k) && !/amethyst|ruby|sapphire|emerald|diamond|moonstone/.test(k)) r[k] = 3; } return r; }
 const LAYERS = [
   {n:'土の坑道', rocks:{stone:60, copper:20, coal:12, iron:8}, mons:['boar','bat'], forage:['cave_mushroom','rock_salt']},
   {n:'水晶洞', rocks:{stone:50, iron:15, silver:20, amethyst:10, copper:5}, mons:['slime','bat'], forage:['glow_moss','rock_salt']},
@@ -7403,12 +7416,15 @@ ACH.push({id:'mr1', n:'鏡の向こうの料理人', d:'鏡の店主を倒す', 
 // ====================================================== v0.48: 自由配置・勲章・遠征隊・オリジナル料理の注文
 const fmtGM = m => { m = Math.max(0, Math.round(m)); const h = Math.floor(m / 60); return h ? h + '時間' + (m % 60 ? (m % 60) + '分' : '') : m + '分'; };
 // ----- 自由配置の飾り
-const PLC = [["bench", "木のベンチ", "out", "nature", 20, 12], ["flowerbed", "丸い花壇", "out", "nature", 18, 12], ["streetlamp", "街灯", "out", "night", 8, 24], ["menuboard", "メニューの黒板", "out", "cute", 12, 16], ["barrelplant", "樽のプランター", "out", "nature", 12, 14], ["catstatue2", "猫の石像", "out", "cute", 12, 14], ["parasol", "パラソル席", "out", "cute", 22, 22], ["topiary", "丸い植木", "out", "nature", 12, 18], ["lantern_st", "石灯籠", "out", "night", 10, 18], ["scarecrow2", "かかし", "farm", "nature", 14, 20], ["windmill", "小さな風車", "farm", "nature", 16, 24], ["beehive", "巣箱", "farm", "nature", 10, 14], ["flowerarch", "花のアーチ", "farm", "cute", 22, 22], ["woodfence", "木の柵", "farm", "nature", 20, 10], ["well2", "小さな井戸", "farm", "nature", 16, 18], ["pumpkins", "かぼちゃの山", "farm", "cute", 16, 12], ["bigplant", "大きな観葉植物", "in", "nature", 12, 20], ["bookshelf", "本棚", "in", "night", 16, 22], ["roundtable", "小さな丸テーブル", "in", "cute", 14, 12], ["barrels", "酒樽の山", "in", "knight", 18, 16], ["winerack", "ワインラック", "in", "night", 16, 20], ["candelabra", "燭台", "in", "night", 10, 18], ["weaponrack", "武器立て", "guild", "knight", 16, 18], ["banner2", "冒険者の旗", "guild", "knight", 10, 24], ["dummy", "訓練人形", "guild", "knight", 12, 20], ["campfire", "たき火", "guild", "night", 14, 12], ["plushie", "魔物のぬいぐるみ", "guild", "cute", 12, 12], ["treasure", "飾りの宝箱", "guild", "knight", 14, 12]];
+const PLC = [["bench", "木のベンチ", "out", "nature", 20, 12], ["flowerbed", "丸い花壇", "out", "nature", 18, 12], ["streetlamp", "街灯", "out", "night", 8, 24], ["menuboard", "メニューの黒板", "out", "cute", 12, 16], ["barrelplant", "樽のプランター", "out", "nature", 12, 14], ["catstatue2", "猫の石像", "out", "cute", 12, 14], ["parasol", "パラソル席", "out", "cute", 22, 22], ["topiary", "丸い植木", "out", "nature", 12, 18], ["lantern_st", "石灯籠", "out", "night", 10, 18], ["scarecrow2", "かかし", "farm", "nature", 14, 20], ["windmill", "小さな風車", "farm", "nature", 16, 24], ["beehive", "巣箱", "farm", "nature", 10, 14], ["flowerarch", "花のアーチ", "farm", "cute", 22, 22], ["woodfence", "木の柵", "farm", "nature", 20, 10], ["well2", "小さな井戸", "farm", "nature", 16, 18], ["pumpkins", "かぼちゃの山", "farm", "cute", 16, 12], ["bigplant", "大きな観葉植物", "in", "nature", 12, 20], ["bookshelf", "本棚", "in", "night", 16, 22], ["roundtable", "小さな丸テーブル", "in", "cute", 14, 12], ["barrels", "酒樽の山", "in", "knight", 18, 16], ["winerack", "ワインラック", "in", "night", 16, 20], ["candelabra", "燭台", "in", "night", 10, 18], ["weaponrack", "武器立て", "guild", "knight", 16, 18], ["banner2", "冒険者の旗", "guild", "knight", 10, 24], ["dummy", "訓練人形", "guild", "knight", 12, 20], ["campfire", "たき火", "guild", "night", 14, 12], ["plushie", "魔物のぬいぐるみ", "guild", "cute", 12, 12], ["treasure", "飾りの宝箱", "guild", "knight", 14, 12], ["fern", "鉢植えのシダ", "in", "nature", 14, 16], ["grandclock", "柱時計", "in", "night", 10, 24], ["floorlamp", "フロアランプ", "in", "night", 10, 22], ["crates", "木箱の山", "in", "knight", 16, 14], ["vase", "花瓶の花", "in", "cute", 10, 16], ["easel", "絵のイーゼル", "in", "cute", 14, 20], ["teaset", "お茶の台", "in", "cute", 14, 12], ["umbrella", "傘立て", "in", "nature", 8, 16], ["coatrack", "コート掛け", "in", "night", 10, 22], ["globe", "地球儀", "in", "knight", 12, 16], ["aquarium", "小さな水槽", "in", "nature", 16, 14], ["catbed", "猫のベッド", "in", "cute", 14, 10], ["herbrack", "吊るした香草", "in", "nature", 14, 18], ["spiceshelf", "香辛料の棚", "in", "knight", 14, 18], ["breadbasket", "パンのかご", "in", "cute", 14, 10], ["tapbarrel", "蛇口つきの樽", "in", "knight", 14, 16], ["gramophone", "蓄音機", "in", "night", 14, 16], ["armchair", "ひじ掛け椅子", "in", "night", 14, 14], ["bonsai", "盆栽", "in", "nature", 14, 12], ["sideboard", "皿の飾り棚", "in", "cute", 18, 18], ["sakura", "桜の枝の花瓶", "in", "season", 12, 20], ["koinobori", "こいのぼり", "out", "season", 18, 24], ["tanabata", "七夕の笹", "out", "season", 14, 24], ["windchime", "風鈴の台", "in", "season", 10, 18], ["sunflower", "ひまわりの鉢", "out", "season", 10, 20], ["jackolantern", "かぼちゃのランタン", "out", "season", 12, 12], ["tsukimi", "お月見の台", "in", "season", 14, 16], ["maplepot", "紅葉の鉢", "out", "season", 14, 18], ["snowman2", "小さな雪だるま", "out", "season", 12, 16], ["xmastree", "飾りのもみの木", "in", "season", 16, 24], ["kadomatsu", "門松", "out", "season", 14, 22], ["kagami", "鏡餅", "in", "season", 10, 12], ["flowerbox", "花の植木箱", "out", "nature", 18, 10], ["signpost", "道しるべ", "out", "knight", 14, 20], ["mailbox", "郵便受け", "out", "cute", 8, 16], ["gnome", "庭の小人", "out", "cute", 8, 12], ["bicycle", "荷台つき自転車", "out", "cute", 20, 14], ["fountain2", "小さな噴水", "out", "nature", 16, 16], ["wheelbarrow", "手押し車", "farm", "nature", 18, 12], ["haybale", "干し草のロール", "farm", "nature", 16, 12], ["milkcans", "牛乳缶", "farm", "cute", 14, 14], ["birdhouse", "鳥の巣箱", "farm", "cute", 10, 20], ["trough", "水飲みおけ", "farm", "nature", 18, 10], ["swing", "木のブランコ", "farm", "cute", 20, 22], ["slimestatue", "スライムの像", "guild", "rare", 12, 14], ["goldpot", "黄金の鍋の置物", "in", "rare", 14, 12], ["dragonskull", "竜の頭骨", "guild", "rare", 22, 14], ["crystalcandle", "水晶の燭台", "in", "rare", 10, 18], ["krakenarm", "大海魔の足の剥製", "guild", "rare", 14, 22], ["armor", "飾りの全身鎧", "in", "rare", 12, 22], ["fairylamp", "妖精のランタン", "out", "rare", 10, 20], ["moonrabbit", "月の兎の像", "out", "rare", 12, 16], ["phoenixvase", "不死鳥の羽の花瓶", "in", "rare", 10, 18], ["treasurepile", "財宝の山", "guild", "rare", 20, 12]];
 const PLCI = {}; PLC.forEach((p, i) => PLCI[p[0]] = {id:p[0], n:p[1], pl:p[2], t:p[3], w:p[4], h:p[5], i});
 const PLC_PLACE = {out:{n:'店の外（霧月通り・広場）', sc:['outside'], fx:'客足', per:.01}, farm:{n:'裏の農場', sc:['farm'], fx:'作物の育ち', per:.015}, in:{n:'店内', sc:['interior'], fx:'評判の上がり方', per:.01}, guild:{n:'ギルド前・魔物牧場', sc:['guild', 'mranch'], fx:'遠征隊の持ち帰り', per:.03}};
-const PLC_TH = {nature:{n:'自然', c:'#7ac85a', cb:'緑あふれる'}, night:{n:'夜', c:'#e8c060', cb:'夜のあかり'}, cute:{n:'かわいい', c:'#f08ab0', cb:'にぎやかで楽しい'}, knight:{n:'冒険者', c:'#a8b8d8', cb:'冒険者の砦'}};
-const PLC_RANK = {nature:0, cute:1, night:2, knight:3}, PLC_MAX = 20, PLC_FXN = 8, PLC_COPY = 3;
-const plcPrice = p => Math.round((1000 + p.w * p.h * 8) * [1, 1.3, 1.7, 2.2][PLC_RANK[p.t]] / 100) * 100;
+const PLC_TH = {nature:{n:'自然', c:'#7ac85a', cb:'緑あふれる'}, night:{n:'夜', c:'#e8c060', cb:'夜のあかり'}, cute:{n:'かわいい', c:'#f08ab0', cb:'にぎやかで楽しい'}, knight:{n:'冒険者', c:'#a8b8d8', cb:'冒険者の砦'}, season:{n:'季節', c:'#f0a0c8', cb:'四季のうつろい'}, rare:{n:'珍品', c:'#c8a0f0', cb:'珍品の間'}};
+const PLC_RANK = {nature:0, cute:1, night:2, knight:3, season:0, rare:0}, PLC_MAX = 20, PLC_FXN = 8, PLC_COPY = 3;
+const plcPrice = p => Math.round((1000 + p.w * p.h * 8) * (p.t === 'season' ? 1.5 : [1, 1.3, 1.7, 2.2][PLC_RANK[p.t]]) / 100) * 100;
+// v0.58：季節の飾り（その季節だけ交換所に並ぶ）と珍しい飾り（闘技場メダル）
+const PLC_SEASON = {sakura:0, koinobori:0, tanabata:1, windchime:1, sunflower:1, jackolantern:2, tsukimi:2, maplepot:2, snowman2:3, xmastree:3, kadomatsu:3, kagami:3};
+const PLC_RARE_C = {slimestatue:12, goldpot:30, dragonskull:25, crystalcandle:15, krakenarm:25, armor:20, fairylamp:15, moonrabbit:18, phoenixvase:22, treasurepile:30};
 function plcSt() { if (!S.plc) S.plc = {own:{}, pl:{}}; if (!S.plc.pl) S.plc.pl = {}; return S.plc; }
 const plcScene = sc => Object.keys(PLC_PLACE).find(k => PLC_PLACE[k].sc.includes(sc));
 const plcList = pk => { const P = plcSt(); return PLC_PLACE[pk].sc.flatMap(sc => P.pl[sc] || []); };
@@ -7465,9 +7481,9 @@ function plcDraw() {
 }
 function openPlcShop() {
   if (!unl('place')) return gateMsg('place'); tut('place'); const P = plcSt(), r = guildState().rank;
-  let html = `<div class="p">受付のリナ「冒険者の皆さんが旅先から持ち帰った品を、飾りとしてお分けしています。ランクが上がると並ぶ品が増えますよ」<br>同じ飾りは${PLC_COPY}個まで。買った飾りは「施設」の「🪑 飾りを自由に置く」から置ける。</div>
+  let html = `<div class="p">受付のリナ「冒険者の皆さんが旅先から持ち帰った品を、飾りとしてお分けしています。ランクが上がると並ぶ品が増えますよ」<br>同じ飾りは${PLC_COPY}個まで。<b>季節の飾り</b>はその季節だけ並ぶ（今は${SEASONS[seasonIdx()].n}）。<b>珍しい飾り</b>は酒場の闘技場メダルの交換所で。買った飾りは「施設」の「🪑 飾りを自由に置く」から置ける。</div>
     <div class="seg">${Object.keys(PLC_PLACE).map(k => `<div class="${plcTab === k ? 'on' : ''}" data-pt="${k}">${PLC_PLACE[k].n.replace(/（.*/, '')}</div>`).join('')}</div><div class="p">置く場所：${PLC_PLACE[plcTab].n}／効果：${PLC_PLACE[plcTab].fx} +${PLC_PLACE[plcTab].per * 100}%ずつ</div>`;
-  html += PLC.filter(p => p[2] === plcTab).map(p => { const x = PLCI[p[0]], c = plcPrice(x), lk = PLC_RANK[x.t] > r, n = P.own[x.id] || 0;
+  html += PLC.filter(p => p[2] === plcTab && p[3] !== 'rare' && (p[3] !== 'season' || PLC_SEASON[p[0]] === seasonIdx())).map(p => { const x = PLCI[p[0]], c = plcPrice(x), lk = PLC_RANK[x.t] > r, n = P.own[x.id] || 0;
     return `<div class="row" style="${lk ? 'opacity:.55' : ''}">${plcIc(x.id, U * 12)}<div class="t"><b>${x.n}</b><span style="color:${PLC_TH[x.t].c}">${PLC_TH[x.t].n}のテーマ</span><span>${lk ? `ギルドのランク${GUILD_RN[PLC_RANK[x.t]]}から` : `持っている ${n}/${PLC_COPY}`}</span></div>${lk ? '' : `<div class="btn ${S.gold >= c && n < PLC_COPY ? '' : 'dis'}" data-pb2="${x.id}">交換<br>${fmt(c)}G</div>`}</div>`; }).join('');
   modal('飾りの交換所', html, 'plcshop');
   bind('[data-pt]', d => { plcTab = d.pt; openPlcShop(); });
@@ -7651,7 +7667,7 @@ function genFloor(f) {
   if (fl.special === 'chest') fl.chest = {x:64, y:132, open:false};
   if (fl.special === 'cp') fl.ladder = {x:104, y:196};
   const n = fl.special === 'vein' ? 30 : fl.special === 'nest' ? 12 : fl.special === 'cp' ? 8 : 22;
-  const w = Object.entries(L.rocks).map(([k, v]) => ({k, w: fl.special === 'vein' && k !== 'stone' ? v * 3 : v}));
+  const w = Object.entries(shallowMix(L, layerOf(f))).map(([k, v]) => ({k, w: fl.special === 'vein' && k !== 'stone' ? v * 3 : v}));
   const bad = (x, y) => (x > 54 && x < 90 && y < 66) || (fl.lake && Math.abs(x + 8 - fl.lake.x) < fl.lake.rx + 10 && Math.abs(y + 6 - fl.lake.y) < fl.lake.ry + 9) ||
     (fl.chest && Math.abs(x - fl.chest.x) < 20 && Math.abs(y - fl.chest.y) < 18) || (fl.elevator && x < 40 && y < 70) || (fl.ladder && Math.abs(x - fl.ladder.x) < 20 && Math.abs(y - fl.ladder.y) < 18) ||
     (fl.lava && ((x < 44 && y > 88 && y < 110) || (x > 100 && y > 168 && y < 190)));

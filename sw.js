@@ -1,6 +1,6 @@
 // 宵闇亭 オフライン用。更新したら VERSION を変える
-const VERSION='nightshade-v0.57.4';
-const CORE=['./','./index.html','./manifest.webmanifest','./icon-192.png','./icon-512.png','./icon-180.png','./pack-nightshade-v0.57.4.json','./game-nightshade-v0.57.4.js'];
+const VERSION='nightshade-v0.58';
+const CORE=['./','./index.html','./manifest.webmanifest','./icon-192.png','./icon-512.png','./icon-180.png','./pack-nightshade-v0.58.json','./game-nightshade-v0.58.js'];
 self.addEventListener('install',e=>{e.waitUntil(caches.open(VERSION).then(c=>c.addAll(CORE.map(u=>new Request(u,{cache:'reload'})))));self.skipWaiting()});
 self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==VERSION).map(k=>caches.delete(k)))));self.clients.claim()});
 self.addEventListener('fetch',e=>{if(e.request.method!=='GET')return;
