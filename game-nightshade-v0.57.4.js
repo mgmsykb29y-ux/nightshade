@@ -646,7 +646,11 @@ function nbRecord(key, g, price, re) {
 }
 function buyMarket(id, n) { const g = ING[INGI[id]]; const cost = g.src[1] * n; if (S.gold < cost) return false; S.gold -= cost; withQ(1, () => add(S.inv, id, n)); S.known.i[id] = true; return true; }
 // v0.52.4：作るリストに必要な食材は、料理人が倉庫から使わずに取っておく（カバン・持ち物にある分は差し引く）
-function wishHold(id) { if (!S.wish || !Object.keys(S.wish).length) return 0; const n = wishNeed()[id] || 0; return n ? Math.max(0, n - bagCount('i', id, false)) : 0; }
+const wishHoldC = {k:null, m:{}};
+function wishHold(id) {
+  const key = wishVer + ':' + S.t; if (wishHoldC.k !== key) { wishHoldC.k = key; wishHoldC.m = {}; } if (id in wishHoldC.m) return wishHoldC.m[id]; return (wishHoldC.m[id] = wishHold0(id));
+}
+function wishHold0(id) { if (!S.wish) return 0; let has = false; for (const k in S.wish) { has = true; break; } if (!has) return 0; const n = wishNeed()[id] || 0; return n ? Math.max(0, n - bagCount('i', id, false)) : 0; }
 const staffAvail = id => Math.max(0, (S.inv[id] || 0) - wishHold(id));
 function canCook(r, autoBuy) {
   const need = {}; r.ings.forEach(id => need[id] = (need[id] || 0) + 1);
@@ -960,6 +964,12 @@ function step(dt, vis) {
   S.ordersT -= dt;
   if (unl('orders') && (S.ordersT <= 0 || S.orders.length < 3)) { if (S.ordersT <= 0) S.ordersT = 300; refillOrders(); }
   dirty = true;
+}
+async function simulateAsync(sec, prog) {   // 放置の計算を少しずつ進め、画面を止めない
+  rep_ = {}; const g0 = S.gold; simulating = true; const tot = Math.min(sec, OFFLINE_CAP); let left = tot, k = 0;
+  try { while (left > 0) { const d = Math.min(2, left); step(d, false); left -= d; if (++k % 300 === 0) { if (prog) prog(1 - left / tot); bootT = Date.now(); await new Promise(r => setTimeout(r, 0)); } } }
+  finally { simulating = false; }
+  const r = rep_; r.gold = S.gold - g0; r.sec = tot; return r;
 }
 function simulate(sec) {
   rep_ = {}; const g0 = S.gold; simulating = true;
@@ -1565,7 +1575,8 @@ function recipeAvail(r) { const need = {}; r.ings.forEach(id => need[id] = (need
 // v0.51 作るリスト（レシピのウィッシュリスト）：S.wish = {ri: 皿数}
 const wishL = () => (S.wish = S.wish || {});
 const haveAnyIng = id => haveIng(id) + haveIng(id, true);
-function wishNeed() { const n = {}; for (const ri in wishL()) for (const id of REC[ri].ings) n[id] = (n[id] || 0) + S.wish[ri]; return n; }
+let wishVer = 0, wishC = null;   // v0.57.4：作るリストの必要数は、変わるまで計算し直さない（放置の計算が重かった）
+function wishNeed() { const w = wishL(), key = wishVer + ':' + S.t; if (wishC && wishC.key === key) return wishC.n; const n = {}; for (const ri in w) for (const id of REC[ri].ings) n[id] = (n[id] || 0) + w[ri]; wishC = {key, n}; return n; }
 // v0.56：作るリストに必要な作物で、手持ち＋育てている数が足りない物（農夫が優先して植える）
 function wishCrop() {
   if (!S.wish || !Object.keys(S.wish).length) return null; const need = wishNeed();
@@ -1574,7 +1585,7 @@ function wishCrop() {
   return null;
 }
 function wishSeedNeed(id) { const n = wishNeed()[id] || 0; return n ? Math.max(0, n - haveAnyIng(id)) : 0; }
-function wishToggle(ri) { const w = wishL(); if (w[ri]) delete w[ri]; else { w[ri] = 1; tut('m_wish'); } dirty = true; }
+function wishToggle(ri) { wishVer++; const w = wishL(); if (w[ri]) delete w[ri]; else { w[ri] = 1; tut('m_wish'); } dirty = true; }
 function wishHTML() {
   const w = wishL(), ks = Object.keys(w).map(Number); if (!ks.length) return `<div class="h">📝 作るリスト</div><div class="p">レシピの右の☆を押すと「作るリスト」に入る。市場では、必要な食材に★と、あと何個いるかが出る。</div>`;
   const need = wishNeed();
@@ -1640,7 +1651,7 @@ function doCook(n) {
   for (const s of cook.slots) takeIng(s.id, s.g, n);
   let key, isNew = false, name;
   if (ri != null) { key = 'r' + ri; isNew = !S.known.r[ri]; S.known.r[ri] = true; if (S.menu[ri] === undefined) S.menu[ri] = true; name = REC[ri].name;
-    if (S.wish && S.wish[ri]) { S.wish[ri]--; if (S.wish[ri] <= 0) { delete S.wish[ri]; setTimeout(() => toast(`📝 作るリストの「${name}」を作り終えた。取り置いていた材料は、料理人も使えるようになる。`, 3500), 600); } } }
+    if (S.wish && S.wish[ri]) { wishVer++; S.wish[ri]--; if (S.wish[ri] <= 0) { delete S.wish[ri]; setTimeout(() => toast(`📝 作るリストの「${name}」を作り終えた。取り置いていた材料は、料理人も使えるようになる。`, 3500), 600); } } }
   else {
     key = 'c:' + k; const ids = cook.slots.map(s => s.id);
     if (!S.creative[key]) {
@@ -2083,8 +2094,8 @@ function openRecipes() {
   bind('[data-ri]', d => { S.menu[d.ri] = S.menu[d.ri] === false; dirty = true; openRecipes(); });
   bind('[data-wl]', d => { wishToggle(+d.wl); openRecipes(); });
   bind('[data-cap]', d => { S.capR = S.capR || {}; const seq = [0, 3, 5, 10, 20, 40], c = S.capR[d.cap] || 0, nx = seq[(seq.indexOf(c) + 1) % seq.length]; if (nx) S.capR[d.cap] = nx; else delete S.capR[d.cap]; tut('m_cap'); dirty = true; openRecipes(); });
-  bind('[data-wx]', d => { delete wishL()[d.wx]; dirty = true; openRecipes(); });
-  bind('[data-wn]', d => { const [ri, v] = d.wn.split(':').map(Number), w = wishL(); w[ri] = Math.max(1, Math.min(99, (w[ri] || 1) + v)); dirty = true; openRecipes(); });
+  bind('[data-wx]', d => { wishVer++; delete wishL()[d.wx]; dirty = true; openRecipes(); });
+  bind('[data-wn]', d => { wishVer++; const [ri, v] = d.wn.split(':').map(Number), w = wishL(); w[ri] = Math.max(1, Math.min(99, (w[ri] || 1) + v)); dirty = true; openRecipes(); });
   bind('[data-a=hint]', () => {
     const H = S.hint && !S.known.r[S.hint.ri] && !S.learned[S.hint.ri] ? S.hint : null, cost = hintCost();
     if (S.gold < cost) return toast('お金が足りない。');
@@ -8120,7 +8131,7 @@ async function boot() {
   bootMark('セーブを読む'); introMsg('読み込み中…（セーブ）'); await new Promise(r => setTimeout(r, 10));
   const sv = loadLocal(); let report = null;
   bootMark('場面の準備');
-  if (sv && sv.v === 1) { S = sv; try { fixState(); } catch (e) { console.error(e); } if (S.afk && S.afk.on) { introMsg('留守中の時間を進めています…'); await new Promise(r => setTimeout(r, 30)); try { report = simulate((Date.now() - S.afk.t) / 1000); } catch (e) { console.error(e); BOOTERR.push('放置の計算：' + e.message); } S.afk.on = false; } scene = (S.pos && S.pos.scene) || 'interior'; if (!SCENES[scene] && scene !== 'mine') scene = 'interior'; try { [player.x, player.y] = scene === 'mine' ? [72, 52] : clampWalk(scene, S.pos.x, S.pos.y); } catch (e) { BOOTERR.push('位置：' + e.message); scene = 'interior'; player.x = 72; player.y = 200; } }
+  if (sv && sv.v === 1) { S = sv; try { fixState(); } catch (e) { console.error(e); } if (S.afk && S.afk.on) { let sec = (Date.now() - S.afk.t) / 1000; const stuck = bootPrev && !bootPrev.done && (bootPrev.st === '留守中の計算' || bootPrev.st === '場面の準備'); if (stuck) { sec = 0; BOOTERR.push('前回の起動が留守中の計算で止まったので、今回は留守中の時間を進めずに始めた'); } bootMark('留守中の計算'); introMsg('留守中の時間を進めています… 0%'); await new Promise(r => setTimeout(r, 30)); try { report = await simulateAsync(sec, f => introMsg(`留守中の時間を進めています… ${Math.round(f * 100)}%`)); } catch (e) { console.error(e); BOOTERR.push('放置の計算：' + e.message); } S.afk.on = false; } scene = (S.pos && S.pos.scene) || 'interior'; if (!SCENES[scene] && scene !== 'mine') scene = 'interior'; try { [player.x, player.y] = scene === 'mine' ? [72, 52] : clampWalk(scene, S.pos.x, S.pos.y); } catch (e) { BOOTERR.push('位置：' + e.message); scene = 'interior'; player.x = 72; player.y = 200; } }
   else { syncShelf(); refillOrders(); }
   try { mineState(); if (scene === 'mine') { if (S.dg && S.dg.cur) genDgFloor(S.dg.cur.dg, S.dg.cur.f); else if (S.mine.floor) genFloor(S.mine.floor); else { scene = 'outside'; player.x = 48; player.y = 222; } }
   buildActors(); syncHot(); updCam(true); setTabs(); hud(); chips(); applyPad();
