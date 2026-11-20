@@ -758,6 +758,25 @@ function b64Blob(src) { try { const bin = atob(src), u = new Uint8Array(bin.leng
 function loadImg(k, src) { return new Promise(r => { if (!src) { BOOTERR.push('画像がない：' + k); return r(); } let done = false; const ok = () => { if (!done) { done = true; r(); } }; const i = new Image(); i.onload = () => { IMG[k] = i; ok(); }; i.onerror = () => { if (i.src.startsWith('data:')) { BOOTERR.push('画像を読めない：' + k); return ok(); } i.src = 'data:image/png;base64,' + src; }; setTimeout(() => { if (!done) BOOTERR.push('画像の読み込みが遅い：' + k); ok(); }, 20000); try { BLOBU[k] = b64Blob(src); i.src = BLOBU[k]; } catch (e) { i.src = 'data:image/png;base64,' + src; } }); }
 const BOOTERR = [];
 const introMsg = t => { const e = document.querySelector('#intro .ts'); if (e) e.innerHTML = t; };
+// v0.57.2：起動の段階を記録し、止まったら知らせる（前回どこで止まったかも分かる）
+let bootStage = '', bootT = Date.now(), bootDone = false;
+const bootPrev = (() => { try { return JSON.parse(localStorage.getItem('nk_boot') || 'null'); } catch (e) { return null; } })();
+function bootMark(st) { bootStage = st; bootT = Date.now(); try { localStorage.setItem('nk_boot', JSON.stringify({st, t:Date.now(), done:st === 'done'})); } catch (e) {} }
+async function rescueCode() {
+  let js = null; for (const k of [SAVE_KEY, ...BAK_KEYS]) { try { js = localStorage.getItem(k); } catch (e) {} if (js) break; }
+  if (!js) return null;
+  if (window.CompressionStream) { const cs = new Blob([js]).stream().pipeThrough(new CompressionStream('deflate')); const buf = new Uint8Array(await new Response(cs).arrayBuffer()); let bin = ''; for (let i = 0; i < buf.length; i += 8192) bin += String.fromCharCode.apply(null, buf.subarray(i, i + 8192)); return 'NK1:' + btoa(bin); }
+  return 'NK0:' + btoa(unescape(encodeURIComponent(js)));
+}
+function bootStuck(why) {
+  const e = document.querySelector('#intro .ts'); if (!e || bootDone) return;
+  e.innerHTML = `<span style="color:#e8a070">${why}（段階：${bootStage}）</span><br><span style="font-size:.85em">セーブは消えていません。</span><br>
+    <span class="btn" id="bs_rl" style="display:inline-block;margin:.5em .3em;padding:.4em .8em">読み込み直す</span><span class="btn" id="bs_cp" style="display:inline-block;margin:.5em .3em;padding:.4em .8em">引き継ぎコードをコピー</span>`;
+  const rl = document.getElementById('bs_rl'), cp = document.getElementById('bs_cp');
+  if (rl) rl.onclick = ev => { ev.stopPropagation(); location.reload(); };
+  if (cp) cp.onclick = async ev => { ev.stopPropagation(); try { const c = await rescueCode(); if (!c) return alert('セーブが見つからない'); await navigator.clipboard.writeText(c); cp.textContent = 'コピーした（' + c.length + '文字）'; } catch (er) { prompt('このコードを長押しでコピー', await rescueCode()); } };
+}
+setInterval(() => { if (!bootDone && Date.now() - bootT > 25000) bootStuck('読み込みが止まっているかもしれません'); }, 5000);
 function iconStyle(idx, px, kind = 'atlas') {
   const sc = px / 32, x = (idx % COLS) * 32 * sc, y = Math.floor(idx / COLS) * 32 * sc;
   return `width:${px}px;height:${px}px;background-image:url(${URL_[kind]});background-size:${IMG.atlas.width * sc}px ${IMG.atlas.height * sc}px;background-position:-${x}px -${y}px`;
@@ -8475,23 +8494,32 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) saveN
 window.addEventListener('pagehide', () => { saveNow(true); try { const o = JSON.parse(localStorage.getItem('nk_tab') || 'null'); if (o && o.id === SV.tab) localStorage.removeItem('nk_tab'); } catch (e) {} });
 
 async function boot() {
+  bootMark('はじめ');
+  if (bootPrev && !bootPrev.done && Date.now() - bootPrev.t < 600000) BOOTERR.push('前回の起動が「' + bootPrev.st + '」で止まった');
   layout();
   const ks = ['atlas','world','sil','gold','chars','charsUI','bg_interior','bg_outside','bg_farm','bg_farm2','logo','machines','workshop','rocks','bg_farm3','bg_farm4','bg_mine0','bg_mine1','bg_mine2','bg_mine3','bg_mine4','bg_mine5','bg_fpond','bg_fpier','bg_flake','tackle','bg_upstairs','stairs','bg_wilds','bg_stall','wagon','decor','bed','bg_b_river','bg_b_flower','bg_b_marsh','bg_b_volcano','bg_b_snow','bg_b_moon','bmap','gimmick','dog','rival','bg_cellar','cellarobj','trapdoor','bg_deep_deep','bg_deep_mist','bg_deep_dark','bg_deep_vein','bg_deep_den','bg_deep_garden','tower_a0','tower_a1','tower_a2','tower_a3','tower_a4','tower_ext','tower_far','tower_off','bg_port','exp_map','exp_map2','bg_desert','exp_map3','exp_map4','exp_map5','bg_tea','bg_capital','bg_isle','bg_guild1','bg_guild2','bg_guild3','bg_guild4','bg_guild5','guild_sign','cara_banner','wagons','cmark','bosses','curse_statue','bg_mranch','guild_sign2','bg_museum','bg_oldtown','bld_chapel','bld_library','bld_school','bld_theater','bld_bathhouse','bld_garden','bld_smithy','bld_gate','bg_mirror','place','bg_mfarm','bg_dg_mirror','bg_dgb_mirror','dg_gate_mirror','mgate','cportraits','steles','sealdoor','digspot','bigchest','crackwall','bg_vault','bg_ancient','moonstall','forge','stall_spr','bg_tavern','bg_arena','tv_boards',...['l0','l1','l2','l3','l4','l5','deep','ship','temple','shrine','castle','volcano'].map(t => 'rocks_' + t),...['ship','temple','shrine','castle','volcano'].flatMap(k => ['bg_dg_' + k, 'bg_dgb_' + k, 'dg_gate_' + k])];
   introMsg('読み込み中…（画像）'); let nl = 0; await Promise.all(ks.map(k => loadImg(k, A[k]).then(() => { if (++nl % 20 === 0) introMsg(`読み込み中…（画像 ${nl}/${ks.length}）`); })));
-  introMsg('読み込み中…（セーブ）'); await new Promise(r => setTimeout(r, 20));
+  bootMark('画像の準備'); introMsg('読み込み中…（画像の準備）'); await new Promise(r => setTimeout(r, 20));
   for (const k of ['atlas','sil','gold','charsUI','tackle']) URL_[k] = BLOBU[k] || ('data:image/png;base64,' + A[k]);
   document.documentElement.style.setProperty('--frameimg', `url(${b64Blob(A.uiframe)})`);
-  // logo
+  // 読み込んだ画像の元の文字列を捨てて、メモリを空ける（iPhone はメモリが足りないと画面ごと落ちる）
+  for (const k of ks) if (BLOBU[k] && IMG[k] && !['uiframe', 'logo', 'bg_stall', 'decor', 'place_ui', 'medals'].includes(k)) A[k] = null;
+  bootMark('ロゴ'); introMsg('読み込み中…（ロゴ）');
+  if (IMG.logo) {
   const lg = $('logo'); lg.width = IMG.logo.width; lg.height = IMG.logo.height; lg.getContext('2d').drawImage(IMG.logo, 0, 0);
   const ls = Math.max(1, Math.floor(144 * U * .9 / IMG.logo.width)); lg.style.width = IMG.logo.width * ls + 'px'; lg.style.height = IMG.logo.height * ls + 'px';
+  }
+  bootMark('歩ける範囲'); introMsg('読み込み中…（地図）'); await new Promise(r => setTimeout(r, 10));
   buildWalk();
+  bootMark('セーブを読む'); introMsg('読み込み中…（セーブ）'); await new Promise(r => setTimeout(r, 10));
   const sv = loadLocal(); let report = null;
+  bootMark('場面の準備');
   if (sv && sv.v === 1) { S = sv; try { fixState(); } catch (e) { console.error(e); } if (S.afk && S.afk.on) { introMsg('留守中の時間を進めています…'); await new Promise(r => setTimeout(r, 30)); try { report = simulate((Date.now() - S.afk.t) / 1000); } catch (e) { console.error(e); BOOTERR.push('放置の計算：' + e.message); } S.afk.on = false; } scene = (S.pos && S.pos.scene) || 'interior'; if (!SCENES[scene] && scene !== 'mine') scene = 'interior'; try { [player.x, player.y] = scene === 'mine' ? [72, 52] : clampWalk(scene, S.pos.x, S.pos.y); } catch (e) { BOOTERR.push('位置：' + e.message); scene = 'interior'; player.x = 72; player.y = 200; } }
   else { syncShelf(); refillOrders(); }
   try { mineState(); if (scene === 'mine') { if (S.dg && S.dg.cur) genDgFloor(S.dg.cur.dg, S.dg.cur.f); else if (S.mine.floor) genFloor(S.mine.floor); else { scene = 'outside'; player.x = 48; player.y = 222; } }
   buildActors(); syncHot(); updCam(true); setTabs(); hud(); chips(); applyPad();
   } catch (e) { console.error(e); BOOTERR.push('場面の準備：' + e.message); try { FL = null; scene = 'interior'; player.x = 72; player.y = 200; buildActors(); syncHot(); updCam(true); setTabs(); hud(); chips(); applyPad(); } catch (e2) { BOOTERR.push('店内の準備：' + e2.message); } }
-  introMsg('タップしてはじめる');
+  bootDone = true; bootMark('done'); introMsg('タップしてはじめる');
   $('intro').onclick = () => {
     $('intro').remove(); if (!sv) tut('start'); setTimeout(showTut, 300); initAudio(); try { AC && AC.resume(); } catch (e) {}
     if (SV.restored) setTimeout(() => toast('⚠ セーブの一部が読めなかったので、予備のセーブから続きを読み込んだ', 6000), 800);
@@ -8505,7 +8533,7 @@ async function boot() {
   requestAnimationFrame(frame);
   initDb();
 }
-boot().catch(e => { console.error(e); introMsg(`<span style="color:#e88">起動中にエラーが起きました：${String(e && e.message || e).slice(0, 120)}</span><br>セーブは消えていません。ページを閉じて開き直してください。直らないときは、この文をそのまま伝えてください。`); });
+boot().catch(e => { console.error(e); bootDone = true; introMsg(`<span style="color:#e88">起動中にエラーが起きました（段階：${bootStage}）：${String(e && e.message || e).slice(0, 120)}</span><br>セーブは消えていません。ページを閉じて開き直してください。直らないときは、この文をそのまま伝えてください。`); });
 
 </script>
 <div id="nkgate" style="position:fixed;inset:0;z-index:99999;background:#0c0a0c;display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;font-family:inherit;color:#e0c890">
