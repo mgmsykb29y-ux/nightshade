@@ -60,7 +60,17 @@ const RESIDENTS = [
   {k:'witch', name:'魔女のミラ', lines:['夜光ナスは月の光で育つのよ。温室があれば、ね。','あなたのスープ、少し魔力の匂いがするわ。','裏の井戸の底から、ときどき歌が聞こえるの。']},
   {k:'beard', name:'鍛冶屋のガルド', lines:['腹が減っては槌も振れん！','宵闇亭の灯りが見えると、仕事終わりだと思える。','昔、地下迷宮で金色の茸を見たことがある。']},
   {k:'lizard', name:'旅商人シャズ', lines:['東の港じゃ、奈落魚ってのが釣れるらしいぜ。','いい値付けは客の顔に書いてある。よく見るこった。','金色の食材？　料理にすると三倍で売れるって噂だ。']},
+  // v0.61 通りの住民を8人追加（hrs＝通りにいる時間［分］、gift＝親しさ3ごとにくれる物、gift2＝親しさ3で2余るときにくれる物）
+  {k:'baker', name:'パン屋のおかみポーラ', hrs:[[360, 840]], gift:[['flour', 4], ['butter', 2]], gift2:[['bread', 3]], lines:['焼きたての匂いで、朝が来たってわかるのさ。','パン生地はね、急かすと機嫌を損ねるんだよ。','宵闇亭のスープにうちのパンを浸すと、たまらないって評判さ。']},
+  {k:'florist', name:'花売りのリリ', hrs:[[480, 1020]], gift:[['strawberry', 3], ['mint', 4]], gift2:[['honey', 2]], lines:['お店のテーブルにお花はいかが？　気分が華やぐわ。','花畑の丘では、晴れた日に珍しい花が咲くの。','ミントを一枝、お茶に浮かべてみて。']},
+  {k:'watch', name:'夜回りのボルツ', hrs:[[1140, 1440], [0, 240]], gift:[['coal', 3], ['beef', 2]], gift2:[['egg', 6]], lines:['夜の通りは任せとけ。宵闇亭の灯りは目印になる。','井戸のあたりで、ときどき妙な足音がするんだ。','腹が減るのは夜回りの職業病だな。']},
+  {k:'bard', name:'吟遊詩人カノン', hrs:[[900, 1380]], gift:[['wine', 2], ['honey', 2]], gift2:[['chocolate', 2]], lines:['今夜の歌は、宵闇亭の名物料理の歌にしよう。','旅先で聞いた話だけど、雪の国の王様は大の甘党らしいよ。','いい料理といい歌は、どちらも余韻が大事なのさ。']},
+  {k:'mail', name:'郵便屋ピップ', hrs:[[540, 720], [840, 960]], gift:[['apple', 2], ['milk', 4]], gift2:[['sugar', 5]], lines:['今日も配達だらけ！　町じゅうを走り回ってるよ。','宵闇亭あての手紙、最近ふえてるって知ってた？','港町から来た荷物は、いつも潮の匂いがするんだ。']},
+  {k:'oldfisher', name:'老漁師トク', hrs:[[300, 540], [960, 1140]], gift:[['bait', 5], ['aji', 3]], gift2:[['iwashi', 4]], lines:['魚はな、朝と夕方に腹を空かせるもんだ。','霧の濃い日は、珍しいのが掛かりやすい。','若いの、釣り糸は張りすぎず緩めすぎず、だ。']},
+  {k:'scholar', name:'学者のエルマー', hrs:[[600, 1080]], gift:[['tea', 4], ['coffee', 3]], gift2:'recipe', lines:['料理とは、つまるところ化学だよ。実に興味深い。','古い文献に、地下に眠る厨房の記述があってね……。','食材の旬を知れば、味は自然とついてくるものさ。']},
+  {k:'dancer', name:'踊り子のサラ', hrs:[[1080, 1440]], gift:[['strawberry', 2], ['chocolate', 2]], gift2:[['wine', 1]], lines:['踊ったあとは、甘いものがいちばん！','夜の広場は、私の舞台なの。見に来てね。','あなたの料理、踊りたくなるくらいおいしいわ。']},
 ];
+const resHere = r => !r.hrs || r.hrs.some(([a, b]) => hmNow() >= a && hmNow() < b);
 const GOALS = [
   {t:'裏の農場で種を植えよう', h:'店内の左上の裏口から農場へ。空いた区画をタップ', chk:s => s.stat.planted > 0, r:50},
   {t:'作物を収穫しよう', h:'持ち物でジョウロを選んで作物をタップ＝水やり。実ったらタップで収穫', chk:s => s.stat.harvested > 0, r:50},
@@ -601,7 +611,7 @@ function buildActors() {
     const hz = hillLv() ? Math.min(S.staff.farmer, 2) : 0; for (let i = 0; i < hz; i++) actors.push({k:'farmer', role:'hfarmer', x:72, y:300 - i * 40, path:[], wait:rnd(0, 2), i});
     for (const k in HANI) for (let i = 0; i < haniN(k); i++) { const r = HANI[k].area; actors.push({k, role:'animal', kind:k, area:r, x:rnd(r[0], r[2]), y:rnd(r[1], r[3]), path:[], wait:rnd(0, 4), i}); }
   } else if (scene === 'outside') {
-    RESIDENTS.forEach((r, i) => actors.push({k:r.k, role:'res', res:i, x:30 + i * 40, y:150 + i * 20, path:[], wait:rnd(0, 3)}));
+    RESIDENTS.forEach((r, i) => { if (!resHere(r)) return; const p = clampWalk('outside', rnd(40, 120), rnd(140, 200)); actors.push({k:r.k, role:'res', res:i, x:p[0], y:p[1], path:[], wait:rnd(0, 3)}); });
   }
   custVis = [];
 }
@@ -1232,12 +1242,18 @@ function floatAt(x, y, txt, cls = '') {
   e.style.left = x * U + 'px'; e.style.top = (y + OFF - camY) * U + 'px'; $('root').appendChild(e); setTimeout(() => e.remove(), 1400);
 }
 let modalOpen = null, onClose = null;
+// v0.61 画面を作り直しても、ほかの画面から戻っても、スクロールの位置を覚えておく（閉じると忘れる）
+const mScroll = {};
 function modal(title, html, key = 'x', closeCb = null) {
   setTimeout(() => tut('m_' + key), 50);
-  $('mtitle').textContent = title; $('mbody').innerHTML = html; $('modal').classList.add('show'); modalOpen = key; onClose = closeCb;
+  const mb = $('mbody'), shown = $('modal').classList.contains('show');
+  const sig = () => [...mb.querySelectorAll('.seg .on')].map(e => e.textContent).join('|');
+  if (shown && modalOpen) mScroll[modalOpen + '|' + $('mtitle').textContent] = {y:mb.scrollTop, sig:sig()};
+  $('mtitle').textContent = title; mb.innerHTML = html; $('modal').classList.add('show'); modalOpen = key; onClose = closeCb;
+  const m = shown && mScroll[key + '|' + title]; mb.scrollTop = m && m.sig === sig() ? m.y : 0;   // タブを切り替えた時はいちばん上から
   setTabs();
 }
-function closeModal() { hideTip(); $('modal').classList.remove('show'); const cb = onClose; modalOpen = null; onClose = null; if (cb) cb(); setTabs(); }
+function closeModal() { for (const k in mScroll) delete mScroll[k]; hideTip(); $('modal').classList.remove('show'); const cb = onClose; modalOpen = null; onClose = null; if (cb) cb(); setTabs(); }
 $('mclose').onclick = closeModal;
 function bind(sel, fn) { $('mbody').querySelectorAll(sel).forEach(el => el.onclick = e => { e.stopPropagation(); fn(el.dataset, el); }); }
 
@@ -1387,7 +1403,7 @@ let promptObj = null;
 const sceneObjs = () => scene === 'mine' ? mineObjs() : SCENES[scene].objs.filter(o => !o.cond || o.cond()).concat(typeof v41Objs === 'function' ? v41Objs() : []);
 function nearestObj() {
   if (isBio()) { const f = S.forage.find(f => Math.hypot(f.x - player.x, f.y - player.y) < 12 && (bioOfScene(scene).zones.includes(f.z))); if (f) return {lb:`拾う：${ingLabel(f.id)}`, act:() => collectF(f), r:[f.x - 4, f.y - 8, f.x + 5, f.y + 1]}; }
-  if (scene === 'outside') for (const a of actors) if (a.role === 'res' && Math.hypot(a.x - player.x, a.y - player.y) < 16) { const h = heldItem(), gift = h && h.t === 'ing' && isOre(h.id);
+  if (scene === 'outside') for (const a of actors) if (a.role === 'res' && Math.hypot(a.x - player.x, a.y - player.y) < 16) { const h = heldItem(), gift = h && h.t === 'ing' && (isOre(h.id) || (LIKES[RESIDENTS[a.res].k] || []).includes(h.id));
     return {lb:gift ? `${ingName(h.id)}を贈る：${RESIDENTS[a.res].name}` : a.res === 1 ? '話す・鍛冶：ガルド' : '話す：' + RESIDENTS[a.res].name, act:() => gift ? giveGift(a, h.id) : a.res === 1 ? openForge(a) : talk(a), res:a}; }
   if (scene === 'mine' && FL) { const m = FL.mons.find(m => Math.hypot(m.x - player.x, m.y - player.y) < 16); if (m) return {lb:`攻撃：${MONT[m.k].n}`, act:() => attackAct(m), res:m};
     const ob = mineObjs().find(o => rectDist(o.r, player.x, player.y - 4) < 10 || Math.hypot(o.st[0] - player.x, o.st[1] - player.y) < 9); if (ob) return ob;
@@ -1455,21 +1471,29 @@ function go(sc, x, y) {
   if (sc === 'guild') guildWalkRefresh();
   setTimeout(() => { scene = sc; player.x = x; player.y = y; player.path = []; S.pos = {scene, x, y}; promptObj = null; buildActors(); updCam(true); chips(); hud(); $('fade').style.opacity = 0; busy = false; tut('sc_' + sc); }, S.ui && S.ui.fast ? 110 : 260);
 }
+// 時間で通りの顔ぶれを入れかえる（ゲーム内10分ごと）
+let resT = -1;
+function resRefresh() { const k = Math.floor(hmNow() / 10); if (k === resT) return; resT = k;
+  RESIDENTS.forEach((r, i) => { const a = actors.find(x => x.role === 'res' && x.res === i), here = resHere(r);
+    if (here && !a) { const p = clampWalk('outside', pick([8, 136]), rnd(150, 200)); actors.push({k:r.k, role:'res', res:i, x:p[0], y:p[1], path:[], wait:0}); }
+    if (!here && a) actors.splice(actors.indexOf(a), 1); }); }
 function talk(a) {
-  const r = RESIDENTS[a.res], day = Math.floor(S.t / 1440);
+  tut('m_res'); const r = RESIDENTS[a.res], day = Math.floor(S.t / 1440);
   let extra = '';
   if (S.friendDay[r.k] !== day) {
     S.friendDay[r.k] = day; S.friend[r.k] = (S.friend[r.k] || 0) + 1;
-    if (S.friend[r.k] % 3 === 0) { const sd = pick(SEEDS.filter(g => !FANTASY.has(g.id) && !HYBS.has(g.id))); add(S.seeds, sd.id, 3); extra = `<br>「これ、余ったからあげるよ」 ${sd.name}の種×3 をもらった（倉庫へ）`; }
+    if (r.gift && S.friend[r.k] % 3 !== 1 && !(r.gift2 === 'recipe' && S.friend[r.k] % 3 === 2)) { const [id, n] = pick(S.friend[r.k] % 3 === 0 ? r.gift : r.gift2); add(S.inv, id, n); S.known.i[id] = true; extra = `<br>「よかったら持っていって」 ${ingName(id)}×${n} をもらった（倉庫へ）`; }
+    else if (r.gift && S.friend[r.k] % 3 !== 2) {}
+    else if (S.friend[r.k] % 3 === 0) { const sd = pick(SEEDS.filter(g => !FANTASY.has(g.id) && !HYBS.has(g.id))); add(S.seeds, sd.id, 3); extra = `<br>「これ、余ったからあげるよ」 ${sd.name}の種×3 をもらった（倉庫へ）`; }
     else if (S.friend[r.k] % 3 === 2) { const un = REC.map((x, i) => i).filter(i => !S.learned[i] && !S.known.r[i] && !SECRET_R.has(i) && !REC[i].ings.some(id => FANTASY.has(id) || RARE_FISH.has(id))); if (un.length) { const ri = pick(un); learnRecipes([ri]); extra = `<br>「うちの秘伝なんだけど…」 レシピ『${REC[ri].name}』を教わった！`; } }
   }
   if (r.k === 'witch' && unl('story') && storyState().n === 5) { S.story.mira = true; toast('<b>魔女のミラ</b><br>「……その日記。マルタの字ね」', 3500); storyTick(); return; }
   toast(`<b>${r.name}</b>（親しさ ${S.friend[r.k] || 0}）<br>「${pick(r.lines)}」${extra}`, 4200);
 }
-const LIKES = {witch:['amethyst','moonstone','yasho'], beard:['iron','gold','meitetsu'], lizard:['ruby','emerald','diamond']};
+const LIKES = {witch:['amethyst','moonstone','yasho'], beard:['iron','gold','meitetsu'], lizard:['ruby','emerald','diamond'], baker:['wheat','honey','strawberry'], florist:['lavender','honey','strawberry'], watch:['sake','beef','coffee'], bard:['wine','sake','honey'], mail:['apple','bread','milk'], oldfisher:['sake','rice','umeboshi'], scholar:['tea','matcha','coffee'], dancer:['chocolate','strawberry','wine']};
 function giveGift(a, id) {
   const r = RESIDENTS[a.res]; if (!takeIng(id, false, 1)) return;
-  const like = LIKES[r.k].includes(id), pts = like ? 6 : 3; S.friend[r.k] = (S.friend[r.k] || 0) + pts; sfx('ok'); syncBag();
+  const like = (LIKES[r.k] || []).includes(id), pts = like ? 6 : 3; S.friend[r.k] = (S.friend[r.k] || 0) + pts; sfx('ok'); syncBag();
   let rw = ''; if (like) { const gold = ING[INGI[id]].value * 2; S.gold += gold; rw = `<br>お礼に ${fmt(gold)}G をもらった。`; }
   toast(`<b>${r.name}</b>「${like ? 'これは…！ ずっと欲しかったんだ。' : 'いいのかい？ ありがとう。'}」<br>親しさ +${pts}（${S.friend[r.k]}）${rw}`, 4000);
 }
@@ -1665,12 +1689,13 @@ function renderCookBook() {
     list.map(ri => { const r = REC[ri], ok = recipeAvail(r), kn = S.known.r[ri], bc = ok ? -1 : cookBuyCost(r);
       return `<div class="row" data-nm="${r.name}・${r.ings.map(ingName).join('・')}">${icHTML(r.icon, U * 11, 'atlas', null, 'r:' + ri)}<div class="t"><b>${r.name}${monTag('r' + ri)} ${kn ? mastStars('r' + ri) : '<span style="color:#8ad0c8;font-size:.8em">未調理</span>'}</b><span>${r.method}：${ingChips(r, true)}</span></div>${wishStar(ri)}${bc >= 0 ? `<div class="btn ${S.gold >= bc ? 'grn' : 'dis'}" data-bc="${ri}" style="font-size:.85em">買って作る<br>${fmt(bc)}G</div>` : `<div class="btn ${ok ? 'grn' : 'dis'}" data-set="${ri}">材料を<br>セット</div>`}</div>`; }).join('');
   modal('かまど', html, 'cook');
-  bind('[data-tab]', d => { cook.tab = d.tab; renderCook(); });
-  bind('[data-set]', d => { const r = REC[d.set]; cook.method = r.method; cook.slots = r.ings.map(id => ({id, g:false})); cook.tab = 'free'; sfx('tick'); renderCook(); });
+  bind('[data-tab]', d => { cook.tab = d.tab; cook.back = null; renderCook(); $('mbody').scrollTop = 0; });
+  bind('[data-set]', d => { const r = REC[d.set]; cook.method = r.method; cook.slots = r.ings.map(id => ({id, g:false})); cook.back = 'book'; cook.bookY = $('mbody').scrollTop; cook.tab = 'free'; sfx('tick'); renderCook(); $('mbody').scrollTop = 0; });
   bind('[data-wl]', d => { wishToggle(+d.wl); renderCook(); });
   bind('[data-bc]', d => { const r = REC[d.bc], c = cookBuyCost(r); if (c < 0 || S.gold < c) return; const cnt = {}; r.ings.forEach(id => cnt[id] = (cnt[id] || 0) + 1); for (const id in cnt) { const l = cnt[id] - haveIng(id); if (l > 0) buyMarket(id, l); }
-    cook.method = r.method; cook.slots = r.ings.map(id => ({id, g:false})); cook.tab = 'free'; toast(`足りない材料を市場で買った（${fmt(c)}G）`); doCook(1); });
+    cook.method = r.method; cook.slots = r.ings.map(id => ({id, g:false})); cook.back = 'book'; cook.bookY = $('mbody').scrollTop; cook.tab = 'free'; toast(`足りない材料を市場で買った（${fmt(c)}G）`); doCook(1); });
   cookSearch('#ckq', '.row[data-nm]');
+  if (cook.bookY != null) { $('mbody').scrollTop = cook.bookY; cook.bookY = null; }
 }
 // かまどの名前検索（打つたびに絞り込む。画面は作り直さない）
 function cookSearch(inp, sel) { const e = document.querySelector(inp); if (!e) return; const f = () => { cook.q = e.value; const q = e.value.trim(); document.querySelectorAll(sel).forEach(x => x.style.display = !q || x.dataset.nm.includes(q) ? '' : 'none'); }; e.oninput = f; f(); }
@@ -1696,7 +1721,7 @@ function renderCook() {
   modal('かまど', html, 'cook');
   bind('[data-tr]', () => openTrial());
   bind('[data-m]', d => { cook.method = d.m; renderCook(); });
-  bind('[data-tab]', d => { cook.tab = d.tab; renderCook(); });
+  bind('[data-tab]', d => { const keep = d.tab === 'book' && cook.bookY != null; cook.tab = d.tab; cook.back = null; renderCook(); if (!keep) $('mbody').scrollTop = 0; });
   bind('.slot', d => { cook.slots.splice(+d.i, 1); renderCook(); });
   bind('.cell', d => { const g = d.g === '1'; const have = haveIng(d.id, g); if (cook.slots.length >= 4 || have - used(d.id, g) <= 0) return; cook.slots.push({id:d.id, g}); renderCook(); });
   bind('[data-n]', d => doCook(+d.n));
@@ -1730,11 +1755,11 @@ function doCook(n) {
   const html = `<div class="result">${dishIcHTML(key, U * 34, gold)}<div class="nm">${gold ? '金色の' : ''}${name} ×${n}</div>
     ${isNew ? `<div class="badge">${ri != null ? '新しいレシピを発見！' : '創作料理が誕生！'}</div>` : ''}
     <div class="p">価値 ${fmt(v)}G ${mastStars(key)}　${qHTML(dqOf(key))}　${ri == null ? '（創作料理は正規のレシピより価値が低め）' : ''}</div><div>${tasteHTML(dishTaste(key))}</div>${nearMsg}</div>
-    ${ordBtnHTML(key)}${aiButtonHTML(key)}<div style="height:${U * 1.4}px"></div><div class="btn big" data-a="again">続けて作る</div><div style="height:${U * 1.4}px"></div><div class="btn big blu" data-a="shelf">陳列棚へ</div>`;
+    ${ordBtnHTML(key)}${aiButtonHTML(key)}<div style="height:${U * 1.4}px"></div><div class="btn big" data-a="again">${cook.back === 'book' ? '📖 レシピ帳に戻る' : '続けて作る'}</div><div style="height:${U * 1.4}px"></div><div class="btn big blu" data-a="shelf">陳列棚へ</div>`;
   modal('できあがり', html, 'cookres');
   bind('[data-ai]', (d, el) => aiNameDish(d.ai, el));
   bind('[data-od]', d => { if (deliverOrder(+d.od)) { closeModal(); } });
-  bind('[data-a]', d => d.a === 'again' ? (cook.slots = cook.slots.filter(s => haveIng(s.id, s.g) > 0), renderCook()) : openShelf(-1));
+  bind('[data-a]', d => d.a === 'again' ? (cook.slots = cook.slots.filter(s => haveIng(s.id, s.g) > 0), cook.back === 'book' && (cook.tab = 'book', cook.back = null), renderCook()) : openShelf(-1));
   if (isNew && ri != null) toast(`レシピ「${name}」を図鑑に登録した。従業員も作れるようになる。`);
 }
 
@@ -2839,6 +2864,7 @@ const TUT = {
   m_orders:['依頼の掲示板', '住民の注文。<b>①書いてある料理を作る</b>（まだ作ったことがない料理は、名前・調理法・材料の数・材料1つがヒント。残りの材料はかまどで試して探す）<br><b>②棚に並べずに「届ける」</b>。作った直後の「できあがり」画面からも届けられる。棚に並べるとお客さんが買ってしまうので注意。<br>作れそうにない依頼は、1日1回「入れ替え」できる。<br>宴会の予約・評論家の記事・料理コンテストもここで見られる。'],
   m_forgehut:['鍛冶小屋', '古井戸の下に、ガルドの鍛冶小屋ができた。<br>小屋をタップすると、いつでも鍛冶（ツルハシ・武器・防具・付与・器）ができる。<br>「施設」タブの「⚒ 鍛冶屋ガルド」からも開ける。'],
   m_cap:['料理人の作る上限', 'レシピ帳の「上限」を押すたびに ∞→3→5→10→20→40 と変わる。<br>倉庫・棚にその料理が上限の数あると、料理人はもう作らない（材料の使いすぎを防ぐ）。'],
+  m_res:['通りの住民', '通りの住民は、時間によって顔ぶれが変わる。話しかけると1日1回 親しさが上がり、親しさ3ごとにその人らしい物をくれる。<br>好きな物を持って近づくと「贈る」ができる（説明書「通りの住民」に好きな物の一覧）。'],
   m_hill:['丘の農地', '裏の農場のいちばん下から行ける、奥の丘。下の<b>立て札</b>で土地を買う（1区→2区→3区の順）。<br>1区ごとに<b>畑8区画・果樹4本</b>が増える。畑の扱い（種・水やり・道具・農夫）は裏の農場と同じ。<br>植えた苗木は、木をタップして<b>「抜く」</b>と植え替えられる（苗木代の半分が戻る）。'],
   m_hillsp:['特別な畑と動物', '<b>特別な畑</b>（2区：棚田・茶畑、3区：ぶどう棚・きのこの原木）は一度建てると、種なしで育ち続ける。収穫は2回分までためておけて、農夫がいると自動で収穫。<br><b>動物</b>（1区）：羊＝羊乳、ヤギ＝ヤギ乳、豚＝トリュフやきのこを掘る、アヒル＝卵。小屋を建てると2頭、増築で4頭。えさはいらない。<br>羊乳・ヤギ乳は<b>乳製品台</b>で、茶葉ともち米は<b>石臼</b>で加工できる。'],
   sc_hill:['丘の農地', '下の立て札で土地を買う。草むらの区画は、まだ買っていない土地。'],
@@ -3094,7 +3120,7 @@ SCENES.upstairs = {name:'宵闇亭　2階', short:'2階', objs:[
   {id:'bar', lb:'酒場カウンター', r:[24,196,144,224], st:[86,244], act:() => S.fac.bar ? openBar() : lockedMsg('bar')},
   {id:'bath', lb:'大浴場', r:[92,246,138,292], st:[86,270], act:() => S.fac.bath ? openBathInfo() : lockedMsg('bath')},
 ]};
-SCENES.farm.objs.push({id:'court', lb:'中庭の席', r:[8,350,136,392], st:[72,346], act:() => S.fac.courtyard ? openCourtInfo() : lockedMsg('courtyard')});
+SCENES.farm.objs.push({id:'court', lb:'中庭の席', r:[8,350,60,392], st:[40,346], act:() => S.fac.courtyard ? openCourtInfo() : lockedMsg('courtyard')}, {id:'court2', lb:'中庭の席', r:[84,350,136,392], st:[104,346], act:() => S.fac.courtyard ? openCourtInfo() : lockedMsg('courtyard')});
 WALKDEF.upstairs = {areas:[[2,36,142,61],[40,58,56,70],[2,67,93,195],[93,108,98,130],[98,67,135,195],[2,195,22,228],[2,226,142,296]],
   blocks:[...UTABLES.map(([tx, ty]) => [tx - 1, ty - 6, tx + 37, ty + 23]), ...TERR_T.map(([tx, ty]) => [tx - 5, ty - 1, tx + 25, ty + 12]), [96,66,110,80], [122,176,136,194], [3,236,31,294], [92,246,138,292]]};
 SCENES.interior.objs.push({id:'stairs', lb:'階段：2階へ', r:[22,300,40,326], st:[31,296], cond:() => S.fac.upstairs > 0, act:() => go('upstairs', 38, 266)});
@@ -3122,14 +3148,18 @@ function drawBath() {
   const lv = S.fac.bath; for (let k = 0; k < lv; k++) if (Math.sin(Math.floor(S.t / 30) * 7.1 + k * 3.3) > -.2) drawChar(['beard', 'knight', 'traveler'][k], 104 + k * 11, 286, k % 2 === 1, true);
 }
 function drawCourtyard() {
-  const lv = S.fac.courtyard || 0; if (!lv) { lockArea(8, 352, 136, 392, true); return; }
-  ctx.fillStyle = '#3a2a1a'; ctx.fillRect(8, 354, 128, 36); ctx.fillStyle = '#5a4430'; for (let x = 10; x < 134; x += 8) ctx.fillRect(x, 356, 6, 32);
+  // v0.61 まん中は丘の農地への道としてあける（左右に分けて席を置く）
+  const lv = S.fac.courtyard || 0; if (!lv) { lockArea(8, 352, 62, 392, true); lockArea(82, 352, 136, 392, true); drawHillSign(); return; }
+  ctx.fillStyle = '#3a2a1a'; ctx.fillRect(8, 354, 54, 36); ctx.fillRect(82, 354, 54, 36); ctx.fillStyle = '#5a4430'; for (let x = 10; x < 134; x += 8) { if (x > 56 && x < 84) continue; ctx.fillRect(x, 356, 6, 32); }
   const slot = Math.floor(S.t / 25), sunny = !wxOn('rain') && !wxOn('storm');
-  for (let i = 0; i < lv * 2; i++) { const tx = 16 + (i % 3) * 42, ty = 362 + Math.floor(i / 3) * 16;
+  for (let i = 0; i < lv * 2; i++) { const tx = [12, 36, 86, 110][i % 4], ty = 362 + Math.floor(i / 4) * 16;
     ctx.fillStyle = '#2a1a10'; ctx.fillRect(tx, ty + 4, 22, 7); ctx.fillStyle = '#8a6a44'; ctx.fillRect(tx + 1, ty + 4, 20, 5); ctx.fillStyle = '#e8d8b0'; ctx.fillRect(tx + 10, ty + 2, 2, 2);
     const h = Math.sin((slot + 1) * 12.9898 + i * 78.233) * 43758.5453; if (sunny && h - Math.floor(h) < .6 && isOpenNow()) drawChar(CUST_KINDS[(i + slot) % CUST_KINDS.length], tx + 4, ty + 6, false, true); }
+  drawHillSign();
   for (const x of [10, 134]) { ctx.fillStyle = '#2a1e16'; ctx.fillRect(x, 340, 1, 14); ctx.fillStyle = isDark() ? '#ffcc66' : '#a88a5a'; ctx.fillRect(x - 1, 338, 3, 3); }
 }
+function drawHillSign() { if (!unl('hill')) return;   // 丘の農地への小さな道しるべ
+  ctx.fillStyle = '#3a2614'; ctx.fillRect(65, 380, 1, 9); ctx.fillStyle = '#7a5232'; ctx.fillRect(58, 376, 14, 5); ctx.fillStyle = '#e8d8a0'; ctx.fillRect(60, 378, 7, 1); ctx.fillRect(68, 377, 1, 3); ctx.fillRect(69, 378, 1, 1); }
 function openBathInfo() { const b = S.fac.bath || 0; modal('大浴場', `<div class="p">大浴場 Lv${b}：宿の泊まり客 +${b * 12}%、宿泊料 +${b * 30}%、朝食代 +${b * 10}%。<br>今の宿泊料：1人 ${fmt(innFee())}G</div>`, 'bath'); }
 function openCourtInfo() { const c = S.fac.courtyard || 0; modal('中庭の席', `<div class="p">中庭の席 Lv${c}：客足 +${c * 6}%。晴れた昼は、畑の作物を使った料理の価値 +${c * 10}%（今日：${!wxOn('rain') && !wxOn('storm') ? '営業中' : '雨で閉鎖中'}）。</div>`, 'court'); }
 function openUp() {
@@ -4752,6 +4782,7 @@ const MAN = [
     '店員を雇うと「自動販売」ができる。値付けの方針（安め・通常・強気）を選べる。',
     '店の格（屋台級→町の食堂→評判の店→名店→伝説の宵闇亭）は評判と売った皿数で上がり、客が増えて高い物も買われるようになる。',
     '評判は高くなるほど上がりにくい。'])},
+  {k:'res', t:'通りの住民', c:() => true, h:() => li(['店の前の通りには住民が歩いている。近づいて「話す」と、1日1回 親しさが+1。親しさ3ごとに、その人らしい物をくれる（ミラ・シャズは種やレシピ）。', '好きな物を持って近づくと「贈る」（ミラ・ガルド・シャズは鉱石や宝石、ほかの人は食材）。好きな物なら親しさ+6とお礼のお金。', '時間で顔ぶれが変わる：パン屋のポーラ（朝6〜14時）・花売りのリリ（8〜17時）・郵便屋ピップ（9〜12時・14〜16時）・学者のエルマー（10〜18時）・吟遊詩人カノン（15〜23時）・老漁師トク（5〜9時・16〜19時）・踊り子のサラ（18〜24時）・夜回りのボルツ（19〜翌4時）。', '好きな物：ポーラ＝小麦・蜂蜜・いちご／リリ＝ラベンダー・蜂蜜・いちご／ボルツ＝酒・牛肉・コーヒー豆／カノン＝ワイン・酒・蜂蜜／ピップ＝りんご・パン・牛乳／トク＝酒・米・梅干し／エルマー＝茶葉・抹茶・コーヒー豆／サラ＝チョコレート・いちご・ワイン'])},
   {k:'hill', t:'丘の農地', c:() => unl('hill'), h:() => li(['店の格が「評判の店」になると、裏の農場のいちばん下の道から行ける。', '<b>土地</b>：1区 8,000G → 2区 20,000G → 3区 45,000G（下から順に）。1区ごとに畑8区画・果樹4本。', '<b>特別な畑</b>：棚田（米20個/10分・もち米12個/10分）・茶畑（茶葉12個/10分）は2区、ぶどう棚（ぶどう10個/15分）・きのこの原木（しいたけ・まいたけ・しめじ・えのき）は3区。種いらず、収穫2回分までたまる。雨の日は少し早い。農夫が自動で収穫。', '<b>動物</b>（1区）：羊（羊乳）・ヤギ（ヤギ乳）・豚（トリュフ25%、ほかはきのこ）・アヒル（卵）。小屋で2頭、増築で4頭。えさはいらない。', '<b>加工</b>：乳製品台＝ヤギ乳→ヨーグルト・チーズ、羊乳→クリームチーズ・チーズ。石臼＝茶葉3→抹茶、もち米2→餅5。', '<b>苗木を抜く</b>：果樹をタップ→「苗木を抜く」（2回押し）。苗木代の半分が戻る。果樹園の看板・丘の立て札の「丘の果樹」一覧からも抜ける。'])},
   {k:'tavern', t:'冒険者の酒場', c:() => unl('tavern'), h:() => li(['ギルドの建物の扉から入る。', '<b>カウンター</b>：冒険者の注文が毎朝3件（倒した魔物の素材の料理・行った町の料理も頼まれる）。届けると値打ち×2.2のお金とギルドポイント。', '<b>訓練所</b>（ランクE）：武器の種類ごとの熟練度。その種類の武器で倒すと+1（ボス+15）、Lvごとにその種類の攻撃+2%（最大Lv20）。稽古（300G×次のLv、+15）は1日3回。', '<b>鑑定屋</b>（ランクD）：開いた後に迷宮で拾う希少以上の武器は未鑑定（ランダムな効果がはたらかない）。鑑定は400G×(レア度+1)²、15%で効果が1つ増える。', '<b>闘技場</b>（ランクC）：勝ち抜き（5連戦・10連戦・無限、1日5回）。体力は持ち越しで波の合間に15%回復、倒れても何も失わない。勝った波の数だけメダル（5連戦の完走+5、10連戦+15）とお金、週の最高記録5・10・20・30波でごほうび。倒したボスの強化版（1.5倍）と1日1回ずつ再戦、勝つとメダル12とボスの素材×2。', '<b>メダルの交換所</b>：帰還の巻物・エリクサー・上級回復薬・宝石の袋・訓練の書・英雄の武器。'])},
   {k:'works', t:'武器の工房', c:() => gearSt().list.some(g => !isAcc(g)), h:() => li(['鍛冶屋の「🔨 工房」（武器を1つ持つと出る）。', '<b>鍛え上げ</b>：鍛冶屋で作った武器を、次の素材（銅→鉄→金→…→奈落晶）の同じ型へ。効果・付与・レア度はそのまま。鉱石は作る時の6割、お金は約半分。', '<b>合成</b>：同じ武器2本で、レア度が1つ上がる（並→良→希少→英雄→伝説）。効果と付与の枠も増える。2本目の付与の宝石は返ってくる。', '<b>効果の振り直し</b>：ランダムな効果のついた武器を初めて手に入れると使える。効果を1つ選んで引き直す（3,000G×レア度＋鉱石2個か石炭4個）。', '<b>分解</b>：装備していない武器を鉱石・石炭・付与した宝石に戻す。', '<b>ガルドの依頼</b>：週に1回。今まで掘った一番いい鉱石・石炭・お金を納めると、好きな種類の「ガルド銘」の武器（英雄・効果3つ・攻撃+10%、ここでしか手に入らない）。'])},
@@ -4956,7 +4987,7 @@ const MAN = [
   }},
 ];
 let manSel = 'flow';
-const MAN_CAT = [['基本', ['flow', 'ctrl', 'cook', 'wish', 'forgehut', 'shop', 'orders', 'fac', 'xfer', 'src']], ['店', ['staff', 'reg', 'critic', 'decor', 'night', 'expand', 'town', 'money', 'contest', 'cellar', 'rival', 'fame', 'kiwami', 'airec', 'stall', 'merchant']],
+const MAN_CAT = [['基本', ['flow', 'ctrl', 'res', 'cook', 'wish', 'forgehut', 'shop', 'orders', 'fac', 'xfer', 'src']], ['店', ['staff', 'reg', 'critic', 'decor', 'night', 'expand', 'town', 'money', 'contest', 'cellar', 'rival', 'fame', 'kiwami', 'airec', 'stall', 'merchant']],
   ['農・釣り', ['farm', 'hill', 'ranch', 'mach', 'brewer', 'breed', 'fish', 'fishmk', 'forage', 'season', 'quality']], ['冒険', ['mine', 'plgrow', 'scroll', 'works', 'tavern', 'monster', 'story', 'guild', 'arms', 'dungeon', 'secrets', 'abyss', 'tower']],
   ['町・遠征', ['expedition', 'desert', 'tea', 'capital', 'isle', 'caravan', 'mirror']], ['やり込み', []]];
 const manCatOf = k => (MAN_CAT.find(c => c[1].includes(k)) || MAN_CAT[MAN_CAT.length - 1])[0];
@@ -8301,6 +8332,7 @@ function frame(now) {
   bioStep(dt);
   if (!fishSt) { mineUpdate(dt); mrWander(dt); }
   if (player.path.length) { if (moveAlong(player, dt, 56) && player.onArrive) { const cb = player.onArrive; player.onArrive = null; cb(); } }
+  if (scene === 'outside') resRefresh();
   actors.forEach(a => { if (a.path.length) moveAlong(a, dt, 26); else { a.wait -= dt; if (a.wait <= 0) npcThink(a); } });
   custVis.forEach(c => updCust(c, dt)); custVis = custVis.filter(c => !c.dead);
   updCam(false);
