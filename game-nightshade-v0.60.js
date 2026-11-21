@@ -97,7 +97,7 @@ const GOALS = [
   {t:'宿屋を開こう', h:'「店の拡張」から。2階の客席Lv2が必要', chk:s => (s.fac.inn || 0) > 0, r:3000, un:['lottery']},
   {t:'福引きを引いてみよう', h:'広場の泉の左下にある、福引きの露店で', chk:s => (s.stat.fuku || 0) >= 1, r:1000, un:['dice']},
   {t:'魔族とのサイコロで1回勝とう', h:'裏営業のあいだ、店内の画面上「🎲サイコロ」から', chk:s => (s.stat.diceWin || 0) >= 1, r:1500, un:['auction']},
-  {t:'行商人の競りで落札しよう', h:'毎週土曜の10時〜22時、広場の右下に来る行商人の荷馬車で（暦にも載る）', chk:s => (s.stat.auction || 0) >= 1, r:2000, un:['branch']},
+  {t:'行商人の競りで落札しよう', h:'掲示板か行商人の荷馬車の「🔨競り」で、週のいつでも入札を預けられる（土曜10時に自動で競る）。土曜10〜22時は荷馬車でその場で入札もできる', chk:s => (s.stat.auction || 0) >= 1, r:2000, un:['branch']},
   {t:'となり町に支店を出そう', h:'「施設」タブの「となり町の支店」から', chk:s => s.branch && s.branch.lv >= 1, r:5000, un:['trade']},
   {t:'食材の相場で利益を出そう', h:'市場の「相場」タブ。安い日に買って、高い日に売る', chk:s => (s.stat.tradeWin || 0) >= 1, r:3000, un:['training']},
   {t:'従業員を修行の旅に出そう', h:'Lv10の従業員を「従業員」タブから', chk:s => (s.stat.train || 0) >= 1, r:5000, un:['rival']},
@@ -753,6 +753,21 @@ function fishRoll(loc, bonus = 0, rod = null) {
     .map(g => ({g, w: g.src[1] * (g.src[1] <= 10 ? (1 + S.fac.pond * .6 + bonus + rare * .7 + medalT('fish') * .15) * fog : 1)}));
   return wpick(list).g;
 }
+// v0.60 釣り師の釣果の偏りを減らす：珍しい魚の重みの伸びに上限（よく釣れる魚の半分まで）、たくさん持っている魚は出にくく
+function staffFish(bonus = 0) {
+  const fog = (evOn('fog') ? 3 : 1) * (wxOn('fog') ? 2 : 1), list = POND.filter(g => !RARE_FISH.has(g.id)), top = Math.max(...list.map(g => g.src[1]));
+  return wpick(list.map(g => { let w = g.src[1]; if (w <= 10) w = Math.min(w * (1 + S.fac.pond * .6 + bonus + medalT('fish') * .15) * fog, top * .5);
+    return {g, w: w / (1 + haveAnyIng(g.id) / 30)}; })).g;
+}
+// v0.60 農夫の植え替えの偏りを減らす：前と同じ作物が、ほかの作物よりずっと多くあるときは、少ない作物（旬は優先）に植え替える
+function farmerPick(last) {
+  const cand = SEEDS.filter(g => g.src[1] > 0 && g.src[1] <= 30 && !HYBS.has(g.id) && !FANTASY.has(g.id) && (S.known.i[g.id] || g.id === last));
+  if (!cand.length) return last; const grow = {}; for (const i of PIDX()) { const p = S.plots[i]; if (p.seed) grow[p.seed] = (grow[p.seed] || 0) + 1.5; }
+  const sc = id => (haveAnyIng(id) + (grow[id] || 0)) / (inSeason(id) ? 1.5 : 1);
+  const ss = cand.map(g => sc(g.id)).sort((a, b) => a - b), med = ss[Math.floor(ss.length / 2)];
+  if (last && (sc(last) < 20 || sc(last) < med * 1.5 + 10)) return last;
+  const low = cand.slice().sort((a, b) => sc(a.id) - sc(b.id)).slice(0, 4); return pick(low).id;
+}
 let farmQB = 0;
 const harvestPlot = (i, toBag) => {
   const p = S.plots[i]; if (!p.seed) return null;
@@ -877,6 +892,7 @@ function step(dt, vis) {
   if (typeof v45Tick === 'function') v45Tick();
   if (typeof v48Tick === 'function') v48Tick();
   if (typeof hillStep === 'function') { hillUnl(); hillStep(dt, vis); }
+  if (S.aucPre) aucPreStep();
   // ranch
   const hens = (S.fac.coop || 0) * 2, cows = S.fac.barn || 0;
   if (hens || cows) {
@@ -939,14 +955,14 @@ function step(dt, vis) {
       const PI = PIDX();
       let done = false;
       for (const j of PI) { if (done) break; if (ready(S.plots[j])) { const h = harvestPlot(j); if (h && fe.p10 === 'bumper' && Math.random() < .15) add(S.inv, h.g.id, 1); if (h && fe.master && Math.random() < .3) add(S.inv, h.g.id, 1); if (h) { rep_.harvested = (rep_.harvested || 0) + h.n; if (vis && scene === plotScene(j)) floatAt(PLOTS[j].x + 6, PLOTS[j].y, h.g.name + (h.gold ? '★' : '') + ' +' + h.n, 'info'); } done = true; } }
-      staffBuying = true; { const wc = wishCrop(); for (const j of PI) { if (done) break; const p = S.plots[j]; if (p.seed) continue; if (wc && plantPlot(j, wc, S.auto.buy)) { done = true; break; } if (p.last && plantPlot(j, p.last, S.auto.buy)) done = true; } } staffBuying = false;
+      staffBuying = true; { const wc = wishCrop(); for (const j of PI) { if (done) break; const p = S.plots[j]; if (p.seed) continue; if (wc && plantPlot(j, wc, S.auto.buy)) { done = true; break; } if (p.last) { const fp = farmerPick(p.last); if (plantPlot(j, fp, S.auto.buy) || (fp !== p.last && plantPlot(j, p.last, S.auto.buy))) done = true; } } } staffBuying = false;
       for (const j of PI) { if (done) break; const p = S.plots[j]; if (p.seed && !ready(p) && !p.w) { p.w = 1.3; done = true; } }
     }
   }
   // fishers
   if (S.staff.fisher) {
     S.tm.fisher -= dt * eSum('fisher') * (1 + .25 * S.fac.pond);
-    while (S.tm.fisher <= 0) { S.tm.fisher += 50; eXp('fisher'); const f = fishRoll('pond', perkN('fisher', 'rare') ? 1.5 : 0); const g = Math.random() < .03 + (perkN('fisher', 'gold') ? .05 : 0); withQ(perkN('fisher', 'big') ? 2 : 1.5, () => add(g ? S.invG : S.inv, f.id, 1)); S.known.i[f.id] = true; rep_.fish = (rep_.fish || 0) + 1; if (vis && scene === 'farm') floatAt(40, 120, f.name + (g ? '★' : ''), 'info'); }
+    while (S.tm.fisher <= 0) { S.tm.fisher += 50; eXp('fisher'); const f = staffFish(perkN('fisher', 'rare') ? 1.5 : 0); const g = Math.random() < .03 + (perkN('fisher', 'gold') ? .05 : 0); withQ(perkN('fisher', 'big') ? 2 : 1.5, () => add(g ? S.invG : S.inv, f.id, 1)); S.known.i[f.id] = true; rep_.fish = (rep_.fish || 0) + 1; if (vis && scene === 'farm') floatAt(40, 120, f.name + (g ? '★' : ''), 'info'); }
   }
   if (S.staff.miner && S.mine && S.mine.max) { S.tm.mine = (S.tm.mine === undefined ? 70 : S.tm.mine) - dt * eSum('miner');
     while (S.tm.mine <= 0) { S.tm.mine += 70; eXp('miner'); const L = LAYERS[layerOf(perkN('miner', 'deep') ? S.mine.max : 1 + Math.floor(Math.random() * S.mine.max))]; if (S.mineAim && S.mine.ever && S.mine.ever[S.mineAim] && Math.random() < .7) { const o = S.mineAim; add(S.inv, o, 1 + (perkN('miner', 'double') && Math.random() < .15 ? 1 : 0)); rep_.ore = (rep_.ore || 0) + 1; continue; } const ores = Object.entries(shallowMix(L, LAYERS.indexOf(L))).filter(([k]) => k !== 'stone').map(([k, w]) => ({k, w: w * (perkN('miner', 'gem') && ING[INGI[k]].src[0] === 'ore' && /amethyst|ruby|sapphire|emerald|diamond|moonstone|yasho|hoshikui/.test(k) ? 2 : 1)}));
@@ -1667,7 +1683,6 @@ function renderCook() {
   let maxN = 99; const cnt = {};
   cook.slots.forEach(s => { const kk = s.id + (s.g ? '*' : ''); cnt[kk] = (cnt[kk] || 0) + 1; });
   for (const kk in cnt) { const g = kk.endsWith('*'), id = g ? kk.slice(0, -1) : kk; maxN = Math.min(maxN, Math.floor(haveIng(id, g) / cnt[kk])); }
-  if (cook.slots.some(s => s.g)) maxN = Math.min(maxN, 1);
   let prev = '？？？';
   if (cook.slots.length) prev = known ? REC[ri].name : (ri != null && S.learned[ri]) ? REC[ri].name + '（初めて作る）' : cre ? cre.name : (ri != null ? '？？？（未発見のレシピ）' : '？？？');
   const html = `${unl('airec') ? `<div class="btn blu" data-tr="1" style="display:block;margin-bottom:${U * 1.4}px;text-align:center">🧪 試作台（料理長とオリジナルレシピを作る）</div>` : ''}<div class="seg"><div class="on" data-tab="free">自由に作る</div><div data-tab="book">レシピ帳</div></div><div class="seg many">${METHODS.map(m => `<div class="${m === cook.method ? 'on' : ''}" data-m="${m}">${m}</div>`).join('')}</div>
@@ -2429,7 +2444,8 @@ function openOrders() {
     const r = REC[o.ri], have = haveDish('r' + o.ri), kn = S.known.r[o.ri] || S.learned[o.ri];
     return `<div class="row">${icHTML(r.icon, U * 11, kn ? 'atlas' : 'sil')}<div class="t"><b>${r.name} ×${o.n}${kn ? '' : '<span style="color:#e8c060;font-weight:normal">（まだ作ったことがない）</span>'}</b><span>${recHint(o.ri)}<br>${o.who}より　報酬 ${fmt(o.reward)}G　手持ち ${have}/${o.n}</span></div><div style="display:flex;flex-direction:column;gap:${U * .8}px"><div class="btn ${have >= o.n ? 'grn' : 'dis'}" data-i="${i}">届ける</div>${rr && have < o.n ? `<div class="btn" data-rr="${i}" style="font-size:.85em">入れ替え</div>` : ''}</div></div>`;
   }).join('');
-  modal('依頼の掲示板', ooHTML() + html + rv, 'orders'); ooBind(openOrders);
+  const auc = unl('auction') ? `<div class="btn big" data-a="auc" style="margin-bottom:${U * 1.4}px">🔨 行商人の競り：${aucLot().d}${S.aucPre && S.aucPre.wk === monthKey() ? `（${fmt(S.aucPre.b)}G 預け中）` : S.aucDone === monthKey() ? '（今週は終了）' : '（入札を預けられる）'}</div>` : '';
+  modal('依頼の掲示板', auc + ooHTML() + html + rv, 'orders'); ooBind(openOrders); bind('[data-a=auc]', () => openAuction());
   bind('[data-contest]', () => openContest());
   bind('[data-rs]', () => { const r = S.resv; if (!r || haveDish(r.key) < r.n) return; takeDish(r.key, false, r.n); S.gold += r.reward; S.rep = Math.min(100, S.rep + repGain(5) * repDim()); S.resv = null; S.resvT = 1500; sfx('ok'); toast(`宴会は大成功！ ${fmt(r.reward)}G を受け取った。`); openOrders(); });
   bind('[data-i]', d => deliverOrder(+d.i, openOrders));
@@ -2762,7 +2778,7 @@ const TUT = {
   sc_b_moon:['月光の森', '夜（20時〜4時）にだけ入れる森。星の実や銀くるみ、幽霊百合が取れる。'],
   lottery:['福引きと宝くじ', '広場（泉の左下）の露店で、福引き（1回500G）と週の宝くじ（1枚500G）が買える。<br>福引きは玉の色で当たりが決まる。金の玉なら8,000Gと限定衣装。宝くじは毎週日曜の夜に当選発表。'],
   dice:['魔族とのサイコロ', '裏営業のあいだ、店内の画面上「🎲サイコロ」で魔族の紳士と丁半勝負。<br>2つのサイコロの合計が偶数なら丁、奇数なら半。当たれば賭け金の倍、外れると没収。1晩10回まで。'],
-  auction:['行商人の競り', '毎週土曜、行商人の荷馬車で競りが開かれる。ライバル3人と同時に入札し、一番高ければ「2番目の値段＋100G」で買える。<br>限定の衣装や伝説の食材が出ることもある。'],
+  auction:['行商人の競り', '毎週1回、行商人の競りがある。ライバル3人と値を付け合い、一番高ければ「2番目の値段＋100G」で買える。<br><b>掲示板か荷馬車の「🔨競り」で、週のいつでも入札を預けられる</b>（お金は預かり、土曜10時に自動で競る。負ければ全額戻る）。画面に<b>勝てる見込み</b>が出る。<br>限定の衣装や伝説の食材が出ることもある。'],
   branch:['となり町の支店', '「施設」タブで支店を出すと、自動で営業して1時間ごとに売上が届く（ゲームを閉じている間も）。<br>お金をかけて広げるほど売上が増える。'],
   trade:['食材の相場', '市場の「相場」タブ。牛肉・ワイン・サフラン・トリュフ・キャビアの値段が毎日上下する。<br>安い日に10個ずつ買って、高い日に売る。グラフは過去7日の値動き。'],
   training:['修行の旅', 'Lv10になった従業員を、お金を払って2日間の修行の旅に出せる（その間は働かない）。<br>帰ってくると奥義を身につけ、ずっと強くなる。'],
@@ -3251,7 +3267,7 @@ function openMerchant() {
   const ic = x => x.k === 'book' ? icHTML(D.bookIcon, U * 11, 'atlas') : x.k === 'tk' ? tkIcon(x.id, U * 11) : ingIc(x.id, U * 11, false, true);
   const html = `<div class="tst">${charHTML('traveler', U * 18)}<div><div class="tth">行商人ドルン</div><div class="ttx" style="font-size:calc(var(--f)*2.9)">「やあ、宵闇亭の。今日も珍しい品を持ってきたよ」<br>なじみ割引 ${Math.round((1 - dc) * 100)}%（これまで ${S.mer.n}回）</div></div></div>` +
     items.map((x, i) => `<div class="row" style="${x.n ? '' : 'opacity:.45'}">${ic(x)}<div class="t"><b>${nm(x)}</b><span>${x.k === 'i' ? (DESC_[x.id] || '') : x.k === 'book' ? '市場より安く手に入る' : x.k === 'seed' ? '温室で育つ幻想の作物' : 'ヌシ専用のルアー（30回）'}　残り ${x.n}</span></div><div class="btn ${x.n && S.gold >= Math.round(x.price * dc) ? '' : 'dis'}" data-mb="${i}">${fmt(Math.round(x.price * dc))}G</div></div>`).join('');
-  modal('行商人の荷馬車', (aucToday() ? `<div class="btn big grn" data-auc="1" style="margin-bottom:${U * 1.5}px">🔨 今日は競りの日：${aucLot().d}</div>` : '') + html, 'merchant');
+  modal('行商人の荷馬車', (unl('auction') ? `<div class="btn big ${aucToday() ? 'grn' : ''}" data-auc="1" style="margin-bottom:${U * 1.5}px">🔨 ${aucToday() ? '今日は競りの日' : '競り（入札を預ける）'}：${aucLot().d}</div>` : '') + html, 'merchant');
   bind('[data-auc]', () => openAuction());
   bind('[data-mb]', d => { const x = items[+d.mb], p = Math.round(x.price * dc); if (!x.n || S.gold < p) return; S.gold -= p; x.n--; S.mer.n++; S.stat.merchant = (S.stat.merchant || 0) + 1;
     if (x.k === 'i') { withQ(2, () => giveBag('i', x.id, false, 1)); S.known.i[x.id] = true; }
@@ -4288,24 +4304,55 @@ const AUC_LOTS = [
 ];
 const aucToday = () => unl('auction') && merchantHere() && weekDay() === 6;
 const aucLot = () => AUC_LOTS[monthKey() % AUC_LOTS.length];
+// v0.60 競りをわかりやすく：ライバルの値は目安の0.65〜1.45倍。勝てる見込み＝3人とも自分より安い確率
+const AUC_LO = .65, AUC_HI = 1.45;
+const aucWinP = (b, v) => { const f = Math.max(0, Math.min(1, (b / v - AUC_LO) / (AUC_HI - AUC_LO))); return f * f * f; };
+const aucBidFor = (p, v) => Math.ceil(v * (AUC_LO + (AUC_HI - AUC_LO) * Math.cbrt(p)) / 100) * 100 + (p >= 1 ? 100 : 0);
+function aucResolve(my, L, auto, wk = monthKey()) {
+  S.aucDone = wk;
+  const rivals = ['金獅子亭のレオン', '港食堂のマリサ', '放浪料理人ギン'].map(n => ({n, b:Math.round(L.v * rnd(AUC_LO, AUC_HI) / 100) * 100})), top = rivals.slice().sort((a, b) => b.b - a.b)[0];
+  let msg, win = my > top.b;
+  if (win) { const pay = Math.min(my, top.b + 100); if (auto) S.gold += my - pay; else S.gold -= pay; S.stat.auction = (S.stat.auction || 0) + 1;
+    if (L.k === 'ing') { add(S.inv, L.id, L.n); S.known.i[L.id] = true; } else if (L.k === 'ware') { if (!S.wares) S.wares = {}; S.wares[L.id] = (S.wares[L.id] || 0) + L.n; } else if (L.k === 'outfit') { if (!S.outfits) S.outfits = {apron:1}; S.outfits[L.id] = 1; } else { for (const id of ['truffle', 'saffron', 'caviar']) { add(S.invG, id, 1); S.known.i[id] = true; } }
+    msg = `落札！ 一番高い ${fmt(my)}G を付けたので、2番目（${top.n} ${fmt(top.b)}G）＋100G の <b>${fmt(pay)}G</b> で「${L.d}」を手に入れた。${auto ? `預けたお金の残り ${fmt(my - pay)}G は戻った。` : ''}`; }
+  else { if (auto) S.gold += my; msg = `${top.n}が ${fmt(top.b)}G で落札した。今回は負け……${auto ? `預けた ${fmt(my)}G はそのまま戻った。` : '（お金は払っていない）'}`; }
+  S.aucLast = msg; dirty = true;
+  const html = `<div class="tth">🔨 競りの結果${auto ? '（預けた入札）' : ''}</div><div class="ledger"><div><span>宵闇亭（あなた）</span><b>${fmt(my)}G</b></div>${rivals.map(r => `<div><span>${r.n}</span><b>${fmt(r.b)}G</b></div>`).join('')}</div><div class="ttx">${msg}</div>`;
+  return {win, msg, html};
+}
+// 前もって入札（週のいつでも。お金は預かり、土曜10時に自動で競る）
+function aucPreStep() {
+  const P = S.aucPre; if (!P) return;
+  const due = P.wk !== monthKey() || (weekDay() === 6 && hmNow() >= 600) || weekDay() === 0;
+  if (!due) return; S.aucPre = null;
+  if (P.wk !== monthKey() && S.aucDone === P.wk) { S.gold += P.b; return; }
+  const L = AUC_LOTS[P.wk % AUC_LOTS.length], r = aucResolve(P.b, L, true, P.wk);
+  sfx(r.win ? 'ok' : 'tick'); if (typeof popStory === 'function') popStory(r.html); toast('🔨 ' + r.msg.replace(/<[^>]+>/g, ''), 5000);
+}
 function openAuction(bid) {
-  if (!aucToday()) return toast('競りは、毎週土曜に行商人が来ているときだけ。');
-  tut('auction'); const L = aucLot(), done = S.aucDone === monthKey(); const b = bid || Math.round(L.v * .8 / 100) * 100;
-  const html = `<div class="tst">${charHTML('traveler', U * 16)}<div><div class="tth">ドルンの競り</div><div class="ttx" style="font-size:calc(var(--f)*2.9)">「今週の目玉はこれだ。ほかの料理人たちも狙ってるぜ。いくらまで出す？」</div></div></div>
-    <div class="h">今週の品：${L.d}</div><div class="p">目安の値打ち：${fmt(L.v)}G。ライバル3人と同時に入札する。一番高い値を付けた人が、<b>2番目に高い値＋100G</b>で買える。負けたらお金は払わない。1週に1回。</div>
-    ${done ? `<div class="p">今週の競りは終わった。${S.aucLast || ''}</div>` : `<div class="p">入札額：<b style="font-size:1.3em">${fmt(b)}G</b></div>
-    <div style="display:flex;gap:3px;margin-bottom:4px">${[-5000, -1000, 1000, 5000].map(v => `<div class="btn" data-ab="${b + v}" style="flex:1">${v > 0 ? '+' : ''}${fmt(v)}</div>`).join('')}</div>
-    <div class="btn big grn ${S.gold >= b ? '' : 'dis'}" data-ago="${b}">この額で入札する</div>`}`;
+  if (!unl('auction')) return gateMsg('auction');
+  tut('auction'); const L = aucLot(), done = S.aucDone === monthKey(), P = S.aucPre && S.aucPre.wk === monthKey() ? S.aucPre : null, live = aucToday();
+  const st = Math.max(100, Math.round(L.v * .05 / 100) * 100), b = Math.max(100, bid || (P ? P.b : aucBidFor(.5, L.v))), p = aucWinP(b, L.v);
+  const pc = Math.round(p * 100), col = pc >= 80 ? '#8ad08a' : pc >= 40 ? '#e8c060' : '#e87a6a';
+  const lo = Math.round(L.v * AUC_LO / 100) * 100, hi = Math.round(L.v * AUC_HI / 100) * 100;
+  let html = `<div class="tst">${charHTML('traveler', U * 16)}<div><div class="tth">ドルンの競り</div><div class="ttx" style="font-size:calc(var(--f)*2.9)">「今週の目玉はこれだ。ほかの料理人たちも狙ってるぜ。いくらまで出す？」</div></div></div>
+    <div class="h">今週の品：${L.d}</div>
+    <div class="p"><b>しくみ</b><br>① 自分の「出せる上限の額」を決める<br>② ライバル3人も値を付ける（目安 ${fmt(L.v)}G の0.65〜1.45倍＝<b>${fmt(lo)}〜${fmt(hi)}G</b> のどこか）<br>③ 一番高い人が、<b>2番目に高い値＋100G</b>だけ払って買う（高めに付けても損しにくい）<br>④ 負けたらお金は払わない。1週に1回</div>`;
+  if (done && !P) html += `<div class="p">今週の競りは終わった。${S.aucLast || ''}</div><div class="p">次の品：${AUC_LOTS[(monthKey() + 1) % AUC_LOTS.length].d}（来週の月曜から入札を預けられる）</div>`;
+  else {
+    html += `<div class="p">入札額：<b style="font-size:1.3em">${fmt(b)}G</b>　<span style="color:${col}">勝てる見込み <b>${pc}%</b></span></div>
+    <div style="height:${U * 2}px;background:#140c08;border-radius:${U}px;margin:${U}px 0;overflow:hidden"><div style="height:100%;width:${pc}%;background:${col}"></div></div>
+    <div style="display:flex;gap:3px;margin-bottom:4px">${[-4 * st, -st, st, 4 * st].map(v => `<div class="btn" data-ab="${b + v}" style="flex:1">${v > 0 ? '+' : ''}${fmt(v)}</div>`).join('')}</div>
+    <div style="display:flex;gap:3px;margin-bottom:4px">${[[.5, '見込み50%'], [.8, '80%'], [1, '必ず勝つ']].map(([q, n]) => `<div class="btn" data-ab="${aucBidFor(q, L.v)}" style="flex:1;font-size:.85em">${n}<br>${fmt(aucBidFor(q, L.v))}G</div>`).join('')}</div>`;
+    if (live && !P) html += `<div class="btn big grn ${S.gold >= b ? '' : 'dis'}" data-ago="${b}">いま、この額で入札する</div>`;
+    else if (P) html += `<div class="p" style="color:#8ad0c8">📨 ${fmt(P.b)}G で入札を預けてある。土曜の10時に自動で競り、結果を知らせる（勝てば差額、負ければ全額が戻る）。</div><div style="display:flex;gap:3px"><div class="btn ${S.gold + P.b >= b ? 'grn' : 'dis'}" data-pre="${b}" style="flex:1">${fmt(b)}G に変える</div><div class="btn" data-a="cancel" style="flex:1">取り消す</div></div>`;
+    else html += `<div class="btn big grn ${S.gold >= b ? '' : 'dis'}" data-pre="${b}">📨 この額で入札を預ける</div><div class="p">お金は預かり、土曜の10時に自動で競る（寝ていても・留守でもよい）。勝てば2番目＋100Gを払い、差額は戻る。負ければ全額戻る。</div>`;
+  }
   modal('行商人の競り', html, 'auction');
   bind('[data-ab]', d => openAuction(Math.max(100, +d.ab)));
-  bind('[data-ago]', d => { const my = +d.ago; if (S.gold < my || S.aucDone === monthKey()) return; S.aucDone = monthKey();
-    const rivals = ['金獅子亭のレオン', '港食堂のマリサ', '放浪料理人ギン'].map(n => ({n, b:Math.round(L.v * rnd(.65, 1.45) / 100) * 100})), top = rivals.slice().sort((a, b) => b.b - a.b)[0];
-    let msg; if (my > top.b) { const pay = Math.min(my, top.b + 100); S.gold -= pay; S.stat.auction = (S.stat.auction || 0) + 1;
-      if (L.k === 'ing') { add(S.inv, L.id, L.n); S.known.i[L.id] = true; } else if (L.k === 'ware') { if (!S.wares) S.wares = {}; S.wares[L.id] = (S.wares[L.id] || 0) + L.n; } else if (L.k === 'outfit') { if (!S.outfits) S.outfits = {apron:1}; S.outfits[L.id] = 1; } else { for (const id of ['truffle', 'saffron', 'caviar']) { add(S.invG, id, 1); S.known.i[id] = true; } }
-      msg = `落札！ ${fmt(pay)}G で「${L.d}」を手に入れた。`; sfx('ok'); }
-    else { msg = `${top.n}が ${fmt(top.b)}G で落札した。今回は負け……`; sfx('break'); }
-    S.aucLast = msg; dirty = true;
-    popStory(`<div class="tth">🔨 競りの結果</div><div class="ledger"><div><span>宵闇亭（あなた）</span><b>${fmt(my)}G</b></div>${rivals.map(r => `<div><span>${r.n}</span><b>${fmt(r.b)}G</b></div>`).join('')}</div><div class="ttx">${msg}</div>`, () => openAuction()); });
+  bind('[data-ago]', d => { const my = +d.ago; if (S.gold < my || S.aucDone === monthKey() || !aucToday()) return; const r = aucResolve(my, L, false); sfx(r.win ? 'ok' : 'break'); popStory(r.html, () => openAuction()); });
+  bind('[data-pre]', d => { const my = +d.pre, old = P ? P.b : 0; if (S.gold + old < my || S.aucDone === monthKey()) return; S.gold += old - my; S.aucPre = {wk:monthKey(), b:my}; dirty = true; sfx('ok'); toast(`📨 ${fmt(my)}G で入札を預けた。土曜の10時に結果が出る。`); if (live) aucPreStep(); else openAuction(my); });
+  bind('[data-a=cancel]', () => { if (!S.aucPre) return; S.gold += S.aucPre.b; S.aucPre = null; dirty = true; toast('預けた入札を取り消した（お金は戻った）。'); openAuction(); });
 }
 
 // ---------- となり町の支店
@@ -4767,7 +4814,7 @@ const MAN = [
   {k:'town', t:'町への投資', c:() => unl('town'), h:() => tbl(['投資', '値段', '効果'], TOWN.map(t => [t.n + (townN(t.id) ? ' ✔' : ''), fmt(t.c) + 'G', t.d]))},
   {k:'airec', t:'オリジナルレシピ（試作台）', c:() => unl('airec'), h:() => li(['かまどの「🧪試作台」で、食材（6つまで）と調理法を選んで味見する。料理長がひとことアドバイスと完成度を返す（最大5回、食材は減らない）。', '<b>仕上げ</b>：味付け（塩・しょうゆ・みそ・甘辛・ソース・スパイス・ハーブ・レモン・ごま・バター・はちみつ）で味が変わる。盛り付け（華やか・上品・重箱など）で値打ちが最大+5%。ジャンル（和・洋・中・エスニック・お菓子・パン）で相性と名前の付き方が変わる。', '<b>ひとことで注文</b>：「寒い夜に温まる辛いスープ」のように書いて「頼む」と、料理長が手元の食材で材料・調理法・仕上げを組み立てる。<b>💡材料を聞く</b>：足すと良い食材が光る（どちらも1回の試作で合わせて4回まで）。', '「これで完成にする」で名前と説明を付けると、オリジナルレシピ図鑑に登録される。1日3品まで。'])},
   {k:'money', t:'運だめし・投資', c:() => unl('lottery'), h:() => li(['<b>福引き</b>：広場の泉の左下の露店。1回500G。金の玉で8,000G＋限定衣装。', '<b>週の宝くじ</b>：1枚500G・週10枚まで。毎週日曜の夜に発表。1等100,000G。']
-    .concat(unl('auction') ? ['<b>行商人の競り</b>：毎週土曜。ライバル3人と入札し、一番高ければ「2番目の値段＋100G」で買える。'] : [])
+    .concat(unl('auction') ? ['<b>行商人の競り</b>：週1回。ライバル3人（目安の0.65〜1.45倍の値）と入札し、一番高ければ「2番目の値段＋100G」で買える。掲示板か荷馬車から週のいつでも入札を預けられ、土曜10時に自動で競る（負ければ全額戻る）。画面に勝てる見込み（%）が出る。'] : [])
     .concat(unl('branch') ? ['<b>となり町の支店</b>：施設タブ。1時間ごとに売上が届く（放置中も）。'] : [])
     .concat(unl('trade') ? ['<b>食材の相場</b>：市場の「相場」タブ。高級食材の値段が毎日上下する。安い日に買って高い日に売る。'] : []))},
   {k:'expedition', t:'遠征（港町シオカゼ）', c:() => unl('expedition'), h:() => li([
