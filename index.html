@@ -394,10 +394,10 @@ details.fsec{margin-bottom:calc(var(--u)*1.2)}details.fsec>summary{cursor:pointe
 <script>
 (function(){var ts=document.querySelector('#intro .ts');function msg(t){if(ts)ts.innerHTML=t}
 function fail(e){msg('<span style="color:#e8a070">ゲームのデータを読み込めませんでした（'+(e&&e.message||e)+'）</span><br>電波のよい所で、アプリを閉じて開き直してください。セーブは消えていません。')}
-async function go(){msg('ダウンロード中…');var r=await fetch('pack-nightshade-v0.58.1.json');if(!r.ok)throw new Error('HTTP '+r.status);var txt;
+async function go(){msg('ダウンロード中…');var r=await fetch('pack-nightshade-v0.59.json');if(!r.ok)throw new Error('HTTP '+r.status);var txt;
  if(r.body&&r.body.getReader){var rd=r.body.getReader(),got=0,parts=[];for(;;){var x=await rd.read();if(x.done)break;parts.push(x.value);got+=x.value.length;msg('ダウンロード中… '+(got/1048576).toFixed(1)+'MB')}
   msg('読み込み中…（データ）');txt=await new Blob(parts).text()}else txt=await r.text();
- window.PACK=JSON.parse(txt);txt=null;var sc=document.createElement('script');sc.src='game-nightshade-v0.58.1.js';sc.onerror=function(){fail('ゲーム本体')};document.body.appendChild(sc)}
+ window.PACK=JSON.parse(txt);txt=null;var sc=document.createElement('script');sc.src='game-nightshade-v0.59.js';sc.onerror=function(){fail('ゲーム本体')};document.body.appendChild(sc)}
 go().catch(fail)})();
 </script>
 

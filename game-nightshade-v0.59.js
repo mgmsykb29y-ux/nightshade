@@ -173,6 +173,7 @@ const UNL = {
   secret:{n:'迷宮の隠し部屋', i:'🧱', d:'迷宮やダンジョンの階に、ひび割れた壁が現れるようになった。崩すと昔の冒険者の隠し部屋がある。', tut:'secret'},
   moon:{n:'満月の夜', i:'🌕', d:'毎週木曜の夜は満月。広場に月の兎の夜店が出て、迷宮には月光スライムが現れ、魔物がなつきやすくなる。', tut:'moon'},
   stele:{n:'石碑と封印の扉', i:'🪨', d:'5つの町の広場に、古い石碑が見えるようになった。紋を集めると、地下迷宮B1の封印の扉が開く。', tut:'stele'},
+  hill:{n:'丘の農地', i:'⛰', d:'裏の農場のいちばん下の道から、奥の「丘の農地」へ行けるようになった。土地を買うと、畑・果樹・特別な畑・動物が増やせる。', tut:'m_hill'},
   tavern:{n:'冒険者の酒場', i:'🍺', d:'ギルドの建物の中が酒場になった。カウンターで冒険者たちの注文を受けて料理を届けると、お金とギルドポイント。', tut:'m_tavern'},
   train:{n:'訓練所', i:'🗡', d:'酒場の奥の訓練所が開いた。武器の種類ごとに熟練度があり、使って倒すほど・稽古するほど、その種類の攻撃が上がる。', tut:'m_train'},
   appraise:{n:'鑑定屋', i:'🔮', d:'酒場の鑑定屋が開いた。これから拾う「希少」以上の武器は未鑑定で、鑑定すると効果が分かり、ときどき効果が1つ増える。', tut:'m_appraise'},
@@ -227,10 +228,10 @@ function fresh() {
     stat:{planted:0, harvested:0, cooked:0, sold:0, earned:0, fished:0}, goal:0,
     pos:{scene:'interior', x:86, y:160}, tools:{}, toolInv:[{uid:1, id:'can1', dur:40}], uidN:1, sel:1, ui:{pad:true, bgm:true, se:true},
     bag:[null, {k:'t', uid:1}, {k:'s', id:'tomato', n:4}, {k:'s', id:'cabbage', n:2}, {k:'s', id:'potato', n:2}, {k:'s', id:'carrot', n:2}, null, null, ...Array(16).fill(null)],
-    mach:{}, trees:[null,null,null,null], traps:{pond:{n:0, t:240}, beach:{n:0, t:240}}, trapItems:0, tackle:{}, fishRec:{}, tkSel:'', forage:[], forageT:30, weather:null, luck3T:0, feed:0, aff:{chicken:0, cow:0}, petDay:{}, learned:{}, books:{}, near:{}, mast:{}, trend:null, resv:null, resvT:900, luckT:0, catDay:{}, rankSeen:0,
+    mach:{}, trees:Array(16).fill(null), hill:{lv:0, sp:{}, an:{}}, traps:{pond:{n:0, t:240}, beach:{n:0, t:240}}, trapItems:0, tackle:{}, fishRec:{}, tkSel:'', forage:[], forageT:30, weather:null, luck3T:0, feed:0, aff:{chicken:0, cow:0}, petDay:{}, learned:{}, books:{}, near:{}, mast:{}, trend:null, resv:null, resvT:900, luckT:0, catDay:{}, rankSeen:0,
   };
   for (const k in FAC) s.fac[k] = FAC[k].start;
-  for (let i = 0; i < 24; i++) s.plots.push({seed:null, t0:0, last:null});
+  for (let i = 0; i < 48; i++) s.plots.push({seed:null, t0:0, last:null});
   for (const k of Object.keys(s.inv)) s.known.i[k] = true;
   for (const n of D.starter) { const i = REC.findIndex(r => r.name === n); if (i >= 0) s.learned[i] = true; }
   return s;
@@ -268,14 +269,14 @@ function fixState() {
   for (const k in f.fac) if (S.fac[k] === undefined) S.fac[k] = f.fac[k];
   for (const k in f.stat) if (S.stat[k] === undefined) S.stat[k] = f.stat[k];
   for (const k in f.tm) if (S.tm[k] === undefined) S.tm[k] = f.tm[k];
-  while (S.plots.length < 24) S.plots.push({seed:null, t0:0, last:null});
+  while (S.plots.length < 48) S.plots.push({seed:null, t0:0, last:null});
   for (const p of S.plots) if (p.seed && p.g === undefined) { p.g = S.t - p.t0; p.w = 0; }
   if (!S.ui) S.ui = {pad:true};
   if (!S.toolInv) { S.toolInv = []; S.uidN = 0; for (const id in (S.tools || {can1:true})) { S.uidN++; S.toolInv.push({uid:S.uidN, id, dur:TOOL_DUR[id]}); } }
   if (S.sel === undefined) S.sel = 0;
   if (!S.bag) { S.bag = Array(BAG_N).fill(null); (S.hot || []).forEach((h, i) => { if (!h || i >= 8) return; if (h.t === 'tool') S.bag[i] = {k:'t', uid:h.uid}; else if (h.t === 'seed' && S.seeds[h.id]) { S.bag[i] = {k:'s', id:h.id, n:S.seeds[h.id]}; delete S.seeds[h.id]; } }); delete S.hot; }
   for (const k of ['learned','books','near','mast','catDay','mach','petDay']) if (!S[k]) S[k] = {};
-  if (!S.trees) S.trees = [null,null,null,null]; if (!S.traps) S.traps = {pond:{n:0, t:240}, beach:{n:0, t:240}}; if (S.trapItems === undefined) S.trapItems = 0; if (!S.tackle) S.tackle = {}; if (!S.fishRec) S.fishRec = {}; if (S.tkSel === undefined) S.tkSel = '';
+  if (!S.trees) S.trees = [null,null,null,null]; while (S.trees.length < 16) S.trees.push(null); if (!S.hill) S.hill = {lv:0, sp:{}, an:{}}; if (!S.traps) S.traps = {pond:{n:0, t:240}, beach:{n:0, t:240}}; if (S.trapItems === undefined) S.trapItems = 0; if (!S.tackle) S.tackle = {}; if (!S.fishRec) S.fishRec = {}; if (S.tkSel === undefined) S.tkSel = '';
   if (!S.forage) S.forage = []; S.forage = S.forage.filter(f => f.v === 2); if (S.forageT === undefined) S.forageT = 30; if (!S.luck3T) S.luck3T = 0;
   if (S.fac.brew && !(S.mach.brew && S.mach.brew.lv)) S.mach.brew = {lv:S.fac.brew, q:[]};
   if (!S.aff) S.aff = {chicken:0, cow:0}; if (S.feed === undefined) S.feed = 0; if (S.tm.egg === undefined) { S.tm.egg = 60; S.tm.milk = 90; }
@@ -288,6 +289,14 @@ function fixState() {
 }
 function syncShelf() { const n = 1 + S.fac.shelf; while (S.shelf.length < n) S.shelf.push({key:null, g:false, n:0, price:0}); }
 const plotCount = () => Math.min(24, 3 + S.fac.plots * 3);
+// v0.59 丘の農地：区画24〜47（1区8つずつ）、果樹4〜15
+const hillLv = () => (S.hill && S.hill.lv) || 0;
+const plotOn = i => i < 24 ? i < plotCount() : i < 24 + hillLv() * 8;
+const PIDX = () => { const a = []; for (let i = 0; i < plotCount(); i++) a.push(i); for (let i = 24; i < 24 + hillLv() * 8; i++) a.push(i); return a; };
+const plotScene = i => i < 24 ? 'farm' : 'hill';
+const scenePlots = sc => PIDX().filter(i => plotScene(i) === sc);
+const plotGrp = i => { if (i < 24) { const fx = i < 12 ? 0 : 12; return {fx, size:12}; } return {fx:24 + Math.floor((i - 24) / 8) * 8, size:8}; };
+const treeOn = i => i < 4 ? !!S.fac.orchard : i < 4 + hillLv() * 4;
 const shelfCount = () => 1 + S.fac.shelf;
 let dirty = true;
 
@@ -431,6 +440,11 @@ window.addEventListener('resize', layout);
 // ====================================================== scenes
 const PLOTS = [];
 for (const fx of [4, 84]) for (let r = 0; r < 3; r++) for (let c = 0; c < 4; c++) PLOTS.push({x: fx + c * 14, y: 48 + r * 16, w: 12, h: 13});
+// v0.59 丘の農地の畑（区画24〜47：1区・2区・3区の順に8つずつ）と果樹の位置（0〜3＝果樹園、4〜15＝丘）
+const HILL_PY = [[326, 342], [252, 268], [106, 122]];
+const HILL_TP = [[[92, 340], [120, 340], [92, 366], [120, 366]], [[92, 266], [120, 266], [92, 292], [120, 292]], [[92, 120], [120, 120], [92, 146], [120, 146]]];
+for (let z = 0; z < 3; z++) for (let r = 0; r < 2; r++) for (let c = 0; c < 4; c++) PLOTS.push({x: 4 + c * 14, y: HILL_PY[z][r], w: 12, h: 13});
+const TREEPOS = [[92, 180], [120, 180], [92, 204], [120, 204], ...HILL_TP.flat()];
 const SHELF_X = i => 5 + i * 13;
 const TABLES = [[10,208],[86,218],[10,262],[86,274]];
 const SHELF_Y = 155;
@@ -468,7 +482,7 @@ const SCENES = {
   mine: {name:'地下迷宮', short:'地下迷宮', objs:[]},
   farm: {name:'宵闇亭　裏の農場', short:'裏の農場', bound:[4,140,46,236], objs:[
     {id:'back', lb:'店に戻る', r:[62,22,84,44], st:[72,48], act:() => go('interior', 14, 40)},
-    ...PLOTS.map((p, i) => ({id:'plot' + i, r:[p.x - 1, p.y - 1, p.x + p.w + 1, p.y + p.h + 1], st:[p.x + 6, p.y + 16], act:() => tapPlot(i), plot:i})),
+    ...PLOTS.slice(0, 24).map((p, i) => ({id:'plot' + i, r:[p.x - 1, p.y - 1, p.x + p.w + 1, p.y + p.h + 1], st:[p.x + 6, p.y + 16], act:() => tapPlot(i), plot:i})),
     {id:'cat', lb:'黒猫', r:[48,156,64,170], st:[66,168], act:() => catAct()},
     {id:'trapP', lb:'かご罠（生簀）', r:[40,140,62,152], st:[66,146], act:() => openTrap('pond')},
     ...[[92,180],[120,180],[92,204],[120,204]].map(([x, y], i) => ({id:'tree' + i, lb:'果樹', r:[x - 8, y - 16, x + 8, y + 4], st:[x, y + 8], act:() => tapTree(i), tree:i})),
@@ -485,7 +499,7 @@ const SCENES = {
 };
 
 // ---------- collision grid (2px cells) + A*
-const GW = 72, GH = 190;
+const GW = 72, GH = 266;
 const WALKDEF = {
   interior: {areas:[[2,34,142,137],[98,134,116,156],[2,152,126,165],[108,163,126,184],[4,182,140,330]],
              blocks:[[58,16,76,47],[74,30,92,48],[90,16,126,50],[43,59,93,77],[125,53,144,79],[0,41,21,67],[0,67,21,119],[123,81,144,133],
@@ -583,6 +597,9 @@ function buildActors() {
     for (let i = 0; i < S.staff.fisher; i++) actors.push({k:'fisher', role:'fisher', x:66, y:110 + i * 9, path:[], wait:rnd(0, 3), i});
     for (let i = 0; i < (S.fac.coop || 0) * 2; i++) actors.push({k:'chicken', role:'animal', kind:'chicken', area:[8,292,58,340], x:rnd(10, 56), y:rnd(295, 338), path:[], wait:rnd(0, 3), i});
     for (let i = 0; i < (S.fac.barn || 0); i++) actors.push({k:'cow', role:'animal', kind:'cow', area:[94,302,136,340], x:rnd(96, 134), y:rnd(305, 338), path:[], wait:rnd(0, 4), i});
+  } else if (scene === 'hill') {
+    const hz = hillLv() ? Math.min(S.staff.farmer, 2) : 0; for (let i = 0; i < hz; i++) actors.push({k:'farmer', role:'hfarmer', x:72, y:300 - i * 40, path:[], wait:rnd(0, 2), i});
+    for (const k in HANI) for (let i = 0; i < haniN(k); i++) { const r = HANI[k].area; actors.push({k, role:'animal', kind:k, area:r, x:rnd(r[0], r[2]), y:rnd(r[1], r[3]), path:[], wait:rnd(0, 4), i}); }
   } else if (scene === 'outside') {
     RESIDENTS.forEach((r, i) => actors.push({k:r.k, role:'res', res:i, x:30 + i * 40, y:150 + i * 20, path:[], wait:rnd(0, 3)}));
   }
@@ -593,6 +610,7 @@ function npcThink(a) {
   if (a.role === 'cook') { const pts = [[42,40],[66,50],[56,81],[100,55],[84,52],[62,132]]; a.step = ((a.step || 0) + 1) % pts.length; const p = pts[a.step]; a.path = route(scene, a.x, a.y, p[0] + a.i * 3, p[1] + (a.i % 2) * 4); a.wait = rnd(.8, 2.2); }
   else if (a.role === 'clerk') { const p = R(rnd(6, 100), rnd(156, 162)); a.path = route(scene, a.x, a.y, p[0], p[1]); a.wait = rnd(1, 3); }
   else if (a.role === 'farmer') { const p = PLOTS[Math.floor(rnd(0, plotCount()))]; a.path = route(scene, a.x, a.y, p.x + 6, p.y + 15); a.wait = rnd(1.5, 3.5); }
+  else if (a.role === 'hfarmer') { const ps = scenePlots('hill'); if (!ps.length) { a.wait = 4; return; } const p = PLOTS[ps[Math.floor(rnd(0, ps.length))]]; a.path = route(scene, a.x, a.y, p.x + 6, p.y + 15); a.wait = rnd(1.5, 3.5); }
   else if (a.role === 'fisher') { a.path = route(scene, a.x, a.y, 68, 108 + a.i * 9 + rnd(-2, 2)); a.wait = rnd(3, 6); }
   else if (a.role === 'animal') { const r = a.area; a.path = [[rnd(r[0], r[2]), rnd(r[1], r[3])]]; a.wait = rnd(2, 6); }
   else if (a.role === 'res') { const p = R(rnd(46, 120), rnd(126, 200)); a.path = route(scene, a.x, a.y, p[0], p[1]); a.wait = rnd(2, 6); }
@@ -750,7 +768,7 @@ const harvestPlot = (i, toBag) => {
   return {g, n, gold};
 };
 function plantPlot(i, id, autoBuy) {
-  const p = S.plots[i]; if (p.seed || i >= plotCount()) return false;
+  const p = S.plots[i]; if (p.seed || !plotOn(i)) return false;
   const g = ING[INGI[id]];
   if (FANTASY.has(id) && !S.fac.greenhouse) return false;
   if (!haveSeed(id)) { if (!autoBuy || HYBS.has(id) || S.gold < g.src[1] || (staffBuying && !canSpend(g.src[1]))) return false; if (staffBuying) spend(g.src[1]); S.gold -= g.src[1]; add(S.seeds, id, 1); }
@@ -841,9 +859,9 @@ function drawHeld() {
   drawIcon(idx, player.x + (player.flip ? -9 : 2), player.y - 11, 8, 'world');
 }
 function waterPlots(i, tool) {
-  const fx = i < 12 ? 0 : 12, idx = i - fx, row = Math.floor(idx / 4);
-  let targets = tool.area >= 12 ? [...Array(12).keys()].map(k => fx + k) : tool.area >= 4 ? [0,1,2,3].map(k => fx + row * 4 + k) : [i];
-  targets = targets.filter(j => j < plotCount() && S.plots[j].seed && !ready(S.plots[j]) && (S.plots[j].w || 0) < tool.mult);
+  const {fx, size} = plotGrp(i), idx = i - fx, row = Math.floor(idx / 4);
+  let targets = tool.area >= 12 ? [...Array(size).keys()].map(k => fx + k) : tool.area >= 4 ? [0,1,2,3].map(k => fx + row * 4 + k) : [i];
+  targets = targets.filter(j => plotOn(j) && S.plots[j].seed && !ready(S.plots[j]) && (S.plots[j].w || 0) < tool.mult);
   targets.forEach(j => S.plots[j].w = tool.mult); dirty = true; return targets;
 }
 
@@ -853,11 +871,12 @@ function step(dt, vis) {
   const gm = (evOn('spring') ? 1.3 : 1) * rsGrow(), rain = evOn('rain');
   const spN = [0, 4, 12, 24][S.fac.sprinkler || 0], spW = [0, 1.3, 1.5, 1.8][S.fac.sprinkler || 0];
   const soilM = (S.staff.farmer && perkN('farmer', 'soil') ? 1.08 : 1) * mrHelp('farm') * plcMul('farm') * medalMul('farm');
-  for (let i = 0; i < plotCount(); i++) { const p = S.plots[i]; if (p.seed) { if (rain && !p.w) p.w = 1.3; if (i < spN && (p.w || 0) < spW) p.w = spW; p.g = (p.g || 0) + dt * (p.w || 1) * gm * (p.fz === 'fert1' ? 1.3 : 1) * growSeasonMul(p.seed) * soilM * (brLv(p.seed) >= 1 ? 1.15 : 1); } }
+  for (const i of PIDX()) { const p = S.plots[i]; if (p.seed) { if (rain && !p.w) p.w = 1.3; if (i < spN && (p.w || 0) < spW) p.w = spW; p.g = (p.g || 0) + dt * (p.w || 1) * gm * (p.fz === 'fert1' ? 1.3 : 1) * growSeasonMul(p.seed) * soilM * (brLv(p.seed) >= 1 ? 1.15 : 1); } }
   if (typeof caravanStep === 'function' && S.cara) caravanStep();
   if (S.mr && typeof mrDaily === 'function' && S.mr.day !== gday()) mrDaily();
   if (typeof v45Tick === 'function') v45Tick();
   if (typeof v48Tick === 'function') v48Tick();
+  if (typeof hillStep === 'function') { hillUnl(); hillStep(dt, vis); }
   // ranch
   const hens = (S.fac.coop || 0) * 2, cows = S.fac.barn || 0;
   if (hens || cows) {
@@ -883,7 +902,7 @@ function step(dt, vis) {
       if (left >= need) { left -= need; st.q.shift(); add(S.inv, r.out, r.n + (job.b && Math.random() < .12 ? 1 : 0)); S.known.i[r.out] = true; rep_.proc = (rep_.proc || 0) + r.n; if (vis && scene === 'interior' && SLOTS[m.slot]) floatAt(m.slot === 'B' || m.slot === 'C' ? 12 : 132, 90, ingName(r.out), 'info'); else if (vis && scene === 'outside' && m.slot[0] === 'W') floatAt(120, 200, ingName(r.out), 'info'); else if (vis && scene === 'interior' && m.slot === 'A') floatAt(10, 60, ingName(r.out), 'info'); }
       else { job.t = (job.t || 0) + left; left = 0; } } }
   ensureTrend(); ensureWeather();
-  if (wxOn('rain') || wxOn('storm')) for (let i = 0; i < plotCount(); i++) { const p = S.plots[i]; if (p.seed && (p.w || 0) < 1.3) p.w = 1.3; }
+  if (wxOn('rain') || wxOn('storm')) for (const i of PIDX()) { const p = S.plots[i]; if (p.seed && (p.w || 0) < 1.3) p.w = 1.3; }
   // forage respawn
   S.forageT -= dt;
   while (S.forageT <= 0) { S.forageT += 80; if (unl('forage')) spawnForage(); }
@@ -893,9 +912,9 @@ function step(dt, vis) {
     while (tp.t <= 0 && haveIng('bait')) { tp.t += 240; takeIng('bait', false, 1); const pool = loc === 'pond' ? [['shrimp',30],['catfish',10],['eel',5]] : [['crab',30],['asari',30],['shrimp',15],['scallop',10],['octopus',8]];
       const id = wpick(pool.map(([k, w]) => ({k, w}))).k; add(S.inv, id, 1); S.known.i[id] = true; rep_.trap = (rep_.trap || 0) + 1; } }
   // orchard
-  if (S.fac.orchard) S.trees.forEach(t => { if (!t) return; const g = ING[INGI[t.id]]; t.g = (t.g || 0) + dt * (wxOn('rain') ? 1.2 : 1);
+  S.trees.forEach((t, ti) => { if (!t || !treeOn(ti)) return; const g = ING[INGI[t.id]]; t.g = (t.g || 0) + dt * (wxOn('rain') ? 1.2 : 1);
     if (t.g >= 1200) { t.ft = (t.ft || 0) + dt; while (t.ft >= g.src[2]) { t.ft -= g.src[2]; t.fruit = Math.min(3, (t.fruit || 0) + 1); } } });
-  if (S.staff.farmer && S.fac.orchard) S.trees.forEach(t => { if (t && t.fruit >= 3) { withQ(2, () => add(S.inv, t.id, t.fruit)); S.known.i[t.id] = true; rep_.fruit = (rep_.fruit || 0) + t.fruit; t.fruit = 0; } });
+  if (S.staff.farmer) S.trees.forEach((t, ti) => { if (t && treeOn(ti) && t.fruit >= 3) { withQ(2, () => add(S.inv, t.id, t.fruit)); S.known.i[t.id] = true; rep_.fruit = (rep_.fruit || 0) + t.fruit; t.fruit = 0; } });
   // reservations (banquets)
   S.resvT -= dt;
   if (!S.resv && S.resvT <= 0 && unl('orders')) {
@@ -917,11 +936,11 @@ function step(dt, vis) {
     S.tm.farmer[i] -= dt * eSpd('farmer', i);
     if (S.tm.farmer[i] <= 0) {
       S.tm.farmer[i] += 6; eXp('farmer', i, .5); const fe = S.emp.farmer[i] || {}; farmQB = fe.p5 === 'season' ? .4 : 0;
-      const n = plotCount();
+      const PI = PIDX();
       let done = false;
-      for (let j = 0; j < n && !done; j++) if (ready(S.plots[j])) { const h = harvestPlot(j); if (h && fe.p10 === 'bumper' && Math.random() < .15) add(S.inv, h.g.id, 1); if (h && fe.master && Math.random() < .3) add(S.inv, h.g.id, 1); if (h) { rep_.harvested = (rep_.harvested || 0) + h.n; if (vis && scene === 'farm') floatAt(PLOTS[j].x + 6, PLOTS[j].y, h.g.name + (h.gold ? '★' : '') + ' +' + h.n, 'info'); } done = true; }
-      staffBuying = true; { const wc = wishCrop(); for (let j = 0; j < n && !done; j++) { const p = S.plots[j]; if (p.seed) continue; if (wc && plantPlot(j, wc, S.auto.buy)) { done = true; break; } if (p.last && plantPlot(j, p.last, S.auto.buy)) done = true; } } staffBuying = false;
-      for (let j = 0; j < n && !done; j++) { const p = S.plots[j]; if (p.seed && !ready(p) && !p.w) { p.w = 1.3; done = true; } }
+      for (const j of PI) { if (done) break; if (ready(S.plots[j])) { const h = harvestPlot(j); if (h && fe.p10 === 'bumper' && Math.random() < .15) add(S.inv, h.g.id, 1); if (h && fe.master && Math.random() < .3) add(S.inv, h.g.id, 1); if (h) { rep_.harvested = (rep_.harvested || 0) + h.n; if (vis && scene === plotScene(j)) floatAt(PLOTS[j].x + 6, PLOTS[j].y, h.g.name + (h.gold ? '★' : '') + ' +' + h.n, 'info'); } done = true; } }
+      staffBuying = true; { const wc = wishCrop(); for (const j of PI) { if (done) break; const p = S.plots[j]; if (p.seed) continue; if (wc && plantPlot(j, wc, S.auto.buy)) { done = true; break; } if (p.last && plantPlot(j, p.last, S.auto.buy)) done = true; } } staffBuying = false;
+      for (const j of PI) { if (done) break; const p = S.plots[j]; if (p.seed && !ready(p) && !p.w) { p.w = 1.3; done = true; } }
     }
   }
   // fishers
@@ -998,6 +1017,7 @@ function ingObtainable(id) {   // いまの進み具合で手に入る食材か�
     case 'herb': case 'potion': return unl('herb');
     case 'tmap': return unl('tmap');
     case 'mfarm': return unl('mirror');
+    case 'hill': return unl('hill');
     default: return false;   // 伝説の食材などは、手に入れるまで秘密
   }
 }
@@ -1070,16 +1090,7 @@ function updCam(snap) {
   const tgt = Math.max(minY, Math.min(maxY, player.y - mid + 6));
   camY = snap ? tgt : camY + (tgt - camY) * .12;
 }
-function render(dt) {
-  const bg = bgImg();
-  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = '#000'; ctx.fillRect(0, 0, 144, LH);
-  ctx.setTransform(1, 0, 0, 1, 0, OFF - Math.round(camY));
-  ctx.drawImage(bg, 0, 0);
-  const list = [];
-  if (scene === 'farm') {
-    const n = plotCount();
-    PLOTS.forEach((p, i) => {
-      if (i >= n) { lockArea(p.x - 1, p.y - 1, p.x + p.w + 1, p.y + p.h + 1, false, i === n || i % 4 === 0); return; }
+function drawPlotCrop(i) { const p = PLOTS[i];
       const s = S.plots[i]; if (!s.seed) return;
       const g = ING[INGI[s.seed]], pr = Math.min(1, (s.g || 0) / g.src[2]);
       if (s.w && pr < 1) { ctx.fillStyle = 'rgba(20,30,60,.45)'; ctx.fillRect(p.x, p.y, p.w, p.h); ctx.fillStyle = '#6a9ad8'; ctx.fillRect(p.x + 1, p.y + 1, 1, 1); }
@@ -1092,13 +1103,25 @@ function render(dt) {
         drawChar(pr < .33 ? 'bush0' : pr < .7 ? 'bush1' : 'bush2', p.x + 6, p.y + 15);
         ctx.fillStyle = '#140c08'; ctx.fillRect(p.x, p.y + p.h - 1, p.w, 2); ctx.fillStyle = '#8aa05a'; ctx.fillRect(p.x, p.y + p.h - 1, Math.round(p.w * pr), 1);
       }
+}
+function render(dt) {
+  const bg = bgImg();
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = '#000'; ctx.fillRect(0, 0, 144, LH);
+  ctx.setTransform(1, 0, 0, 1, 0, OFF - Math.round(camY));
+  ctx.drawImage(bg, 0, 0);
+  const list = [];
+  if (scene === 'farm') {
+    const n = plotCount();
+    PLOTS.slice(0, 24).forEach((p, i) => {
+      if (i >= n) { lockArea(p.x - 1, p.y - 1, p.x + p.w + 1, p.y + p.h + 1, false, i === n || i % 4 === 0); return; }
+      drawPlotCrop(i);
     });
   }
   if (scene === 'farm') {
     if (!S.fac.bee) lockArea(87, 145, 104, 163);
     if (!S.fac.greenhouse) lockArea(5, 168, 64, 216, true);
     if (!S.fac.orchard) lockArea(81, 168, 140, 216, true);
-    else S.trees.forEach((t, i) => { const [x, y] = [[92,180],[120,180],[92,204],[120,204]][i]; if (!t) return; const st = t.g >= 1200 ? 2 : t.g >= 400 ? 1 : 0; drawChar('tree' + st, x, y + 4);
+    else S.trees.slice(0, 4).forEach((t, i) => { const [x, y] = TREEPOS[i]; if (!t) return; const st = t.g >= 1200 ? 2 : t.g >= 400 ? 1 : 0; drawChar('tree' + st, x, y + 4);
       for (let k = 0; k < (t.fruit || 0); k++) drawIcon(ING[INGI[t.id]].icon, x - 6 + k * 4, y - 12 + (k % 2) * 3, 6); });
     for (let i = 0; i < S.traps.pond.n; i++) drawChar('trap', 44 + i * 6, 152);
   }
@@ -1147,6 +1170,7 @@ function render(dt) {
   if (scene === 'mranch') list.push(...drawMRanch());
   if (scene === 'museum') list.push(...drawMuseum());
   if (scene === 'tavern') list.push(...drawTavern());
+  if (scene === 'hill') list.push(...drawHill());
   if (scene === 'oldtown') list.push(...drawOldtown());
   if (scene === 'mfarm') list.push(...drawMFarm());
   if (scene === 'outside' && nrN()) list.push({y:-998, f:drawNoren});
@@ -1156,7 +1180,7 @@ function render(dt) {
   list.push({y: player.y, f: () => { if (hurtT > 0) { hurtT -= dt; if ((tNow * 20 | 0) % 2) return; } drawChar('player', player.x, player.y, player.flip); drawWeaponSwing(); }});
   list.sort((a, b) => a.y - b.y).forEach(o => o.f());
   drawHeld();
-  if ((scene === 'outside' || scene === 'farm' || scene === 'wilds' || (isBio() && !['b_snow', 'b_moon'].includes(scene))) && S.weather) {
+  if ((scene === 'outside' || scene === 'farm' || scene === 'hill' || scene === 'wilds' || (isBio() && !['b_snow', 'b_moon'].includes(scene))) && S.weather) {
     const k = S.weather.k, top = camY - 20;
     if (k === 'rain' || k === 'storm') { ctx.strokeStyle = k === 'storm' ? 'rgba(170,190,230,.55)' : 'rgba(150,170,210,.4)'; ctx.lineWidth = 1; ctx.beginPath();
       for (let i = 0; i < (k === 'storm' ? 70 : 40); i++) { const x = (i * 37 + tNow * 90) % 160 - 8, y = top + ((i * 53 + tNow * 220) % 280); ctx.moveTo(x | 0, y | 0); ctx.lineTo((x - 2) | 0, (y + 5) | 0); } ctx.stroke();
@@ -1264,8 +1288,8 @@ function chips() {
   if (S.tmap && S.tmap.maps.length && unl('tmap') && scene !== 'mine') h += `<div class="chip" data-c="tmap">🗺地図${S.tmap.maps.length}</div>`;
   if (scene === 'mine') {
     h += `<div class="chip grn" data-c="eat">食べる</div>`; if (unl('herb') || MK_POTS.some(id => haveIng(id))) h += `<div class="chip" data-c="pot">🧪薬</div>`; if (haveIng('scroll')) h += `<div class="chip blu" data-c="scroll">巻物で帰る</div>`;
-  } else if (scene === 'farm') {
-    const n = S.plots.slice(0, plotCount()).filter(ready).length, e = S.plots.slice(0, plotCount()).filter(p => !p.seed).length;
+  } else if (scene === 'farm' || scene === 'hill') {
+    const sp = scenePlots(scene), n = sp.filter(j => ready(S.plots[j])).length, e = sp.filter(j => !S.plots[j].seed).length;
     if (n) h += `<div class="chip grn" data-c="harv">全部収穫${n}</div>`;
     if (e) h += `<div class="chip" data-c="plantall">まとめ植え</div>`;
   }
@@ -1297,7 +1321,7 @@ function chipAct(c) {
     toast({strong:'強気：単価は上がるが客は減り、評判も下がりやすい', normal:'通常：適正よりわずかに高め', cheap:'安売り：客と評判が増える'}[S.auto.mode]);
   } else if (c === 'harv') {
     let got = {};
-    for (let i = 0; i < plotCount(); i++) if (ready(S.plots[i])) { const h = harvestPlot(i, true); got[h.g.name + (h.gold ? '★' : '')] = (got[h.g.name + (h.gold ? '★' : '')] || 0) + h.n; floatAt(PLOTS[i].x + 6, PLOTS[i].y, '+' + h.n, 'info'); }
+    for (const i of scenePlots(scene === 'hill' ? 'hill' : 'farm')) if (ready(S.plots[i])) { const h = harvestPlot(i, true); got[h.g.name + (h.gold ? '★' : '')] = (got[h.g.name + (h.gold ? '★' : '')] || 0) + h.n; floatAt(PLOTS[i].x + 6, PLOTS[i].y, '+' + h.n, 'info'); }
     toast('収穫：' + Object.entries(got).map(([k, v]) => `${k}×${v}`).join('、'));
   } else if (c === 'plantall') openPlant(null, true);
   else if (c === 'eat') openEat();
@@ -1358,9 +1382,9 @@ function nearestObj() {
   for (const o of sceneObjs()) { const d = Math.min(rectDist(o.r, player.x, player.y - 4), Math.hypot(o.st[0] - player.x, o.st[1] - player.y)); if (d < bd) { bd = d; best = o; } }
   return best && bd < 11 ? best : null;
 }
-function treeLabel(i) { const t = S.trees[i]; if (!S.fac.orchard) return '🔒 果樹園'; if (!t) return '苗木を植える'; return t.fruit ? `${ingName(t.id)}を収穫（${t.fruit}）` : `${ingName(t.id)}の木`; }
+function treeLabel(i) { const t = S.trees[i]; if (!treeOn(i)) return i < 4 ? '🔒 果樹園' : '🔒 丘の農地'; if (!t) return '苗木を植える'; return t.fruit ? `${ingName(t.id)}を収穫（${t.fruit}）` : `${ingName(t.id)}の木`; }
 function plotLabel(i) {
-  if (i >= plotCount()) return '🔒 畑の区画（施設で開放）';
+  if (!plotOn(i)) return i < 24 ? '🔒 畑の区画（施設で開放）' : '🔒 丘の農地（土地を買うと使える）';
   const p = S.plots[i], h = heldItem();
   if (!p.seed) return h && h.t === 'seed' ? `${ingLabel(h.id)}の種を植える` : h && h.t === 'tool' && toolOf(h).kind === 'hoe' ? 'クワでまとめて植える' : '種を植える';
   if (ready(p)) return h && h.t === 'tool' && toolOf(h).kind === 'sickle' ? '鎌でまとめて収穫' : `${ingLabel(p.seed)}を収穫する`;
@@ -1478,24 +1502,31 @@ function openTrap(loc) {
   bind('[data-a=put]', () => { if (S.trapItems <= 0 || tp.n >= 3) return; S.trapItems--; tp.n++; sfx('pop'); dirty = true; openTrap(loc); });
 }
 // v0.58.1：果樹園の看板から、4本の木をまとめて見る・植える・収穫する
-function openOrchard() {
-  const rows = [0, 1, 2, 3].map(i => { const t = S.trees[i]; if (!t) return `<div class="row"><div class="t"><b>${i + 1}本目：空き</b><span>苗木を選んで植える</span></div><div class="btn grn" data-ot="${i}">植える</div></div>`;
+function openOrchard(hill) {
+  const idx = hill ? [...Array(hillLv() * 4).keys()].map(k => 4 + k) : [0, 1, 2, 3];
+  const rows = idx.map((i, n) => { const t = S.trees[i], lb = hill ? `${Math.floor(n / 4) + 1}区の${n % 4 + 1}本目` : `${n + 1}本目`; if (!t) return `<div class="row"><div class="t"><b>${lb}：空き</b><span>苗木を選んで植える</span></div><div class="btn grn" data-ot="${i}">植える</div></div>`;
     const g = ING[INGI[t.id]], grown = t.g >= 1200, left = grown ? g.src[2] - (t.ft || 0) : 1200 - t.g;
-    return `<div class="row">${ingIc(t.id, U * 10, false, true)}<div class="t"><b>${i + 1}本目：${g.name}の木</b><span>${t.fruit ? `実が${t.fruit}個なっている` : grown ? `次の実まで あと${Math.ceil(left / 60)}分` : `育成中 あと${Math.ceil(left / 60)}分`}</span></div>${t.fruit ? `<div class="btn grn" data-ot="${i}">収穫</div>` : ''}</div>`; }).join('');
-  modal('果樹園', `<div class="p">苗木を植えると約20分で育ち、その後は何度でも実る（1本に最大3個たまる）。農夫がいると自動で収穫する。畑の右下の4つの盛り土をタップしても同じ。</div>` + rows, 'orchard');
-  bind('[data-ot]', d => { const i = +d.ot; if (S.trees[i] && S.trees[i].fruit) { tapTree(i); openOrchard(); } else tapTree(i); });
+    return `<div class="row">${ingIc(t.id, U * 10, false, true)}<div class="t"><b>${lb}：${g.name}の木</b><span>${t.fruit ? `実が${t.fruit}個なっている` : grown ? `次の実まで あと${Math.ceil(left / 60)}分` : `育成中 あと${Math.ceil(left / 60)}分`}</span></div>${t.fruit ? `<div class="btn grn" data-ot="${i}">収穫</div>` : ''}<div class="btn" data-pl="${i}" style="font-size:.8em">抜く</div></div>`; }).join('');
+  modal(hill ? '丘の果樹' : '果樹園', `<div class="p">苗木を植えると約20分で育ち、その後は何度でも実る（1本に最大3個たまる）。農夫がいると自動で収穫する。「抜く」で別の苗木に植え替えられる（苗木代の半分が戻る）。${hill ? '' : '畑の右下の4つの盛り土をタップしても同じ。'}</div>` + (rows || '<div class="p">まだ土地を買っていない。</div>'), 'orchard');
+  bind('[data-ot]', d => { const i = +d.ot; if (S.trees[i] && S.trees[i].fruit) { tapTree(i); openOrchard(hill); } else tapTree(i); });
+  bind('[data-pl]', d => { const i = +d.pl; pullTree(i); if (S.trees[i]) return; openOrchard(hill); });
 }
 function tapTree(i) {
-  if (!S.fac.orchard) return lockedMsg('orchard');
+  if (!treeOn(i)) return i < 4 ? lockedMsg('orchard') : openHillLand();
   const t = S.trees[i];
   if (!t) { const fr = ING.filter(g => g.src[0] === 'tree');
     modal('苗木を植える', `<div class="p">苗木は約20分で育ち、その後は何度でも実る（最大3個たまる）。農夫がいると自動で収穫する。</div>` + fr.map(g => `<div class="row">${ingIc(g.id, U * 10, false, true)}<div class="t"><b>${g.name}の苗木</b><span>実るまでの間隔 ${Math.round(g.src[2] / 60)}分</span></div><div class="btn ${S.gold >= g.src[1] ? '' : 'dis'}" data-f="${g.id}">${fmt(g.src[1])}G</div></div>`).join(''), 'tree');
     bind('[data-f]', d => { const g = ING[INGI[d.f]]; if (S.gold < g.src[1]) return; S.gold -= g.src[1]; S.trees[i] = {id:d.f, g:0, ft:0, fruit:0}; sfx('pop'); dirty = true; closeModal(); toast(`${g.name}の苗木を植えた。`); });
     return; }
-  if (t.fruit) { withQ(2.2, () => giveBag('i', t.id, false, t.fruit)); sfx('pop'); floatAt([92,120,92,120][i], [180,180,204,204][i] - 14, `${ingName(t.id)} +${t.fruit}`, 'info'); t.fruit = 0; dirty = true; return; }
+  if (t.fruit) { withQ(2.2, () => giveBag('i', t.id, false, t.fruit)); sfx('pop'); floatAt(TREEPOS[i][0], TREEPOS[i][1] - 14, `${ingName(t.id)} +${t.fruit}`, 'info'); t.fruit = 0; dirty = true; return; }
   const g = ING[INGI[t.id]], left = t.g < 1200 ? 1200 - t.g : g.src[2] - (t.ft || 0);
-  toast(`${g.name}の木：${t.g < 1200 ? '育成中' : '次の実まで'} あと${Math.ceil(left / 60)}分`, 1800);
+  modal(`${g.name}の木`, `<div class="p">${t.g < 1200 ? '育成中' : '次の実まで'} あと<b>${Math.ceil(left / 60)}分</b>（実は最大3個たまる）</div><div class="btn big" data-a="pull">苗木を抜く（${fmt(Math.floor(g.src[1] / 2))}G戻る）</div>`, 'tree');
+  bind('[data-a=pull]', () => pullTree(i));
 }
+// v0.59 植えた苗木を抜く（苗木代の半分が戻る。2回押しで確定）
+function pullTree(i) { const t = S.trees[i]; if (!t) return; const g = ING[INGI[t.id]], back = Math.floor(g.src[1] / 2);
+  if (!(window.__pullArm && window.__pullArm.i === i && window.__pullArm.t > Date.now())) { window.__pullArm = {i, t:Date.now() + 2500}; return toast(`もう一度押すと<b>${g.name}の木を抜く</b>（実っている分は収穫される）`, 2500); }
+  window.__pullArm = null; if (t.fruit) withQ(2.2, () => giveBag('i', t.id, false, t.fruit)); S.trees[i] = null; S.gold += back; sfx('pop'); dirty = true; closeModal(); toast(`${g.name}の木を抜いた（${fmt(back)}G戻った）。空いた場所に別の苗木を植えられる。`); }
 function pickForage(f) { if (!S.forage.includes(f)) return; S.forage = S.forage.filter(x => x !== f); S.stat.foraged = (S.stat.foraged || 0) + 1; tmDrop(.003, '採集'); const g = Math.random() < .04 * luckMul(); withQ(rnd(1.4, 2.6), () => giveBag('i', f.id, g, 1)); sfx('pop'); floatAt(f.x, f.y - 10, (g ? '金色の' : '') + ingName(f.id) + ' +1', 'info'); }
 function catAct() {
   const day = gday();
@@ -1514,12 +1545,12 @@ function pickGarden() {
 // ---------- farming
 function lockedMsg(k) { const f = FAC[k]; toast(`🔒 ${f.name}：まだ使えない。<br>「施設」タブで${S.fac[k] ? '強化' : '設置'}（${fmt(f.cost(S.fac[k]))}G）すると開放`); }
 function tapPlot(i) {
-  if (i >= plotCount()) return lockedMsg('plots');
+  if (!plotOn(i)) return i < 24 ? lockedMsg('plots') : openHillLand();
   const p = S.plots[i], h = heldItem();
   if (h && h.t === 'tool' && toolOf(h).kind === 'sickle' && ready(p)) {
-    const tl = toolOf(h), fx = i < 12 ? 0 : 12, row = Math.floor((i - fx) / 4);
-    const area = tl.area >= 12 ? [...Array(12).keys()].map(k => fx + k) : [0,1,2,3].map(k => fx + row * 4 + k);
-    let c = 0; for (const j of area) if (j < plotCount() && ready(S.plots[j])) { const r = harvestPlot(j, true); floatAt(PLOTS[j].x + 6, PLOTS[j].y, '+' + r.n, 'info'); c++; }
+    const tl = toolOf(h), {fx, size} = plotGrp(i), row = Math.floor((i - fx) / 4);
+    const area = tl.area >= 12 ? [...Array(size).keys()].map(k => fx + k) : [0,1,2,3].map(k => fx + row * 4 + k);
+    let c = 0; for (const j of area) if (plotOn(j) && ready(S.plots[j])) { const r = harvestPlot(j, true); floatAt(PLOTS[j].x + 6, PLOTS[j].y, '+' + r.n, 'info'); c++; }
     useTool(toolInst(h.uid)); sfx('pop'); toast(`${tl.name}で${c}区画をまとめて収穫した。`, 1500); syncBag(); return;
   }
   if (h && h.t === 'ing' && FERTS.has(h.id) && p.seed && !ready(p)) {
@@ -1528,8 +1559,8 @@ function tapPlot(i) {
   }
   if (ready(p)) { const r = harvestPlot(i, true); sfx('pop'); floatAt(PLOTS[i].x + 6, PLOTS[i].y, `${r.g.name}${r.gold ? '★金色' : ''} +${r.n}`, r.gold ? '' : 'info'); if (r.gold) toast(`<b>金色の${r.g.name}</b>が採れた！ 料理に使うと3倍の値で売れる。`); syncHot(); dirty = true; return; }
   if (!p.seed && h && h.t === 'tool' && toolOf(h).kind === 'hoe') {
-    const tl = toolOf(h), fx = i < 12 ? 0 : 12, row = Math.floor((i - fx) / 4);
-    const area = (tl.area >= 12 ? [...Array(12).keys()].map(k => fx + k) : [0,1,2,3].map(k => fx + row * 4 + k)).filter(j => j < plotCount() && !S.plots[j].seed);
+    const tl = toolOf(h), {fx, size} = plotGrp(i), row = Math.floor((i - fx) / 4);
+    const area = (tl.area >= 12 ? [...Array(size).keys()].map(k => fx + k) : [0,1,2,3].map(k => fx + row * 4 + k)).filter(j => plotOn(j) && !S.plots[j].seed);
     return openPlant(null, false, area, toolInst(h.uid));
   }
   if (!p.seed) {
@@ -1547,7 +1578,7 @@ function tapPlot(i) {
 }
 function openPlant(i, all = false, area = null, hoe = null) {
   const list = SEEDS.filter(g => (!FANTASY.has(g.id) || S.fac.greenhouse) && (!HYBS.has(g.id) || haveSeed(g.id)));
-  const empty = [...Array(plotCount()).keys()].filter(j => !S.plots[j].seed);
+  const empty = scenePlots(i != null ? plotScene(i) : scene === 'hill' ? 'hill' : 'farm').filter(j => !S.plots[j].seed);
   const target = i != null && !all && !S.plots[i].seed ? i : null;
   if (area) { const a2 = area.filter(j => !S.plots[j].seed);
     modal('クワでまとめて植える', `<div class="p">空き区画 <b>${a2.length}</b> にまとめて植える（種が無いときは自動で購入）</div>` + list.map(g => `<div class="row" data-id="${g.id}">${ingIc(g.id, U * 11, false, !!haveSeed(g.id))}<div class="t"><b>${g.name}</b><span>所持 ${haveSeed(g.id)}　種 ${g.src[1]}G</span></div><div class="btn">植える</div></div>`).join(''), 'plant');
@@ -1802,7 +1833,7 @@ let invTab = 'ing', invQ = '', invSel = null;
 const INV_FIL = {ing:'all', dish:'all', oth:'all'}, INV_SORT = {ing:'dex', dish:'value', oth:'kind'};
 const OTH_SRC = new Set(['potion', 'mregg', 'tmap', 'ore']);
 const ING_CAT = [['all', 'すべて'], ['farm', '畑・果樹'], ['fish', '魚'], ['forage', '採集・薬草'], ['mine', '迷宮・魔物'], ['shop', '市場・町'], ['proc', '加工・熟成'], ['rare', '珍品・伝説'], ['gold', '金色']];
-const ING_CATMAP = {seed:'farm', tree:'farm', pier:'fish', pond:'fish', nushi:'fish', forage:'forage', herb:'forage', mine:'mine', deep:'mine', dungeon:'mine', market:'shop', merchant:'shop', town:'shop', proc:'proc', cellar:'proc', item:'proc', legend:'rare', night:'rare'};
+const ING_CATMAP = {seed:'farm', tree:'farm', hill:'farm', pier:'fish', pond:'fish', nushi:'fish', forage:'forage', herb:'forage', mine:'mine', deep:'mine', dungeon:'mine', market:'shop', merchant:'shop', town:'shop', proc:'proc', cellar:'proc', item:'proc', legend:'rare', night:'rare'};
 const OTH_CAT = [['all', 'すべて'], ['gear', '装備'], ['tool', '道具'], ['seed', '種'], ['pot', '薬'], ['egg', '卵'], ['ore', '鉱石・宝石'], ['map', '地図']];
 const SORT_N = {dex:'図鑑順', value:'値打ち順', count:'数の多い順', name:'名前順', kind:'種類順'};
 const SORT_OPT = {ing:['dex', 'value', 'count', 'name'], dish:['value', 'count', 'name', 'dex'], oth:['kind', 'value', 'count', 'name']};
@@ -1980,7 +2011,7 @@ window.addEventListener('pointerup', e => {
 });
 window.addEventListener('pointercancel', () => { if (dg) { clearTimeout(dg.timer); if (dg.ghost) dg.ghost.remove(); dg = null; } });
 const ZONE_N = {forest:'霧の森', beach:'月光の浜', river:'川辺と滝', flower:'花畑の丘', marsh:'霧の湿地', volcano:'火山のふもと', snow:'雪の高原', moon:'月光の森（夜）'};
-function srcText(g) { if (g.src[0] === 'mfarm') return '異界：鏡の畑（鏡の町ウラヤミ）'; if (g.src[0] === 'mregg') return g.id === 'egg_mix' ? '魔物牧場の掛け合わせ' : '迷宮・ダンジョンの魔物や宝箱（魔物牧場の解放後）'; if (g.src[0] === 'herb') return '魔物牧場の薬草畑'; if (g.src[0] === 'potion') return '魔物牧場の調合小屋'; if (g.src[0] === 'dungeon') { const G = DGD[g.src[1]]; return `専用ダンジョン「${G.n}」（${TOWNC[G.town].n}）の${G.bm === g.id ? 'ボス' : '魔物・岩・宝箱'}`; } if (g.src[0] === 'town') return '遠征：' + ((TOWNC[g.src[1]] || {}).n || '港町シオカゼ') + 'の市場'; if (g.src[0] === 'deep') return '奈落の深層（' + ({garden:'地底の庭', mist:'毒霧の階', vein:'鉱脈の階の岩', den:'魔物の巣の魔物'}[g.src[1]] || '') + '）'; if (g.src[0] === 'cellar') return '地下貯蔵庫で' + ingName(g.src[1]) + 'を熟成'; return ({forage:'採集：' + (ZONE_N[g.src[1]] || '') + 'で拾える', tree:'果樹園で実る', night:'裏営業の深夜の客が置いていく', mine:'地下迷宮で手に入る', ore:'地下迷宮で掘れる', seed:'畑で育つ', market:'市場で買える', pond:'生簀で釣れる', pier:'釣り桟橋で釣れる', proc:'キッチンの加工器具で作る', item:'たい肥箱で作る（畑で使う）', nushi:'ヌシ：' + ((NUSHI[g.src[1]] || {}).hint || '')}[g.src[0]] || '') + (FANTASY.has(g.id) ? '（温室が必要）' : '') + (g.src[0] === 'market' && PROC_OUT.has(g.id) ? '・加工器具でも作れる' : ''); }
+function srcText(g) { if (g.src[0] === 'hill') return '丘の農地の' + ({goat:'ヤギ', sheep:'羊'}[g.src[1]] || '動物'); if (g.src[0] === 'mfarm') return '異界：鏡の畑（鏡の町ウラヤミ）'; if (g.src[0] === 'mregg') return g.id === 'egg_mix' ? '魔物牧場の掛け合わせ' : '迷宮・ダンジョンの魔物や宝箱（魔物牧場の解放後）'; if (g.src[0] === 'herb') return '魔物牧場の薬草畑'; if (g.src[0] === 'potion') return '魔物牧場の調合小屋'; if (g.src[0] === 'dungeon') { const G = DGD[g.src[1]]; return `専用ダンジョン「${G.n}」（${TOWNC[G.town].n}）の${G.bm === g.id ? 'ボス' : '魔物・岩・宝箱'}`; } if (g.src[0] === 'town') return '遠征：' + ((TOWNC[g.src[1]] || {}).n || '港町シオカゼ') + 'の市場'; if (g.src[0] === 'deep') return '奈落の深層（' + ({garden:'地底の庭', mist:'毒霧の階', vein:'鉱脈の階の岩', den:'魔物の巣の魔物'}[g.src[1]] || '') + '）'; if (g.src[0] === 'cellar') return '地下貯蔵庫で' + ingName(g.src[1]) + 'を熟成'; return ({forage:'採集：' + (ZONE_N[g.src[1]] || '') + 'で拾える', tree:'果樹園で実る', night:'裏営業の深夜の客が置いていく', mine:'地下迷宮で手に入る', ore:'地下迷宮で掘れる', seed:'畑で育つ', market:'市場で買える', pond:'生簀で釣れる', pier:'釣り桟橋で釣れる', proc:'キッチンの加工器具で作る', item:'たい肥箱で作る（畑で使う）', nushi:'ヌシ：' + ((NUSHI[g.src[1]] || {}).hint || '')}[g.src[0]] || '') + (FANTASY.has(g.id) ? '（温室が必要）' : '') + (g.src[0] === 'market' && PROC_OUT.has(g.id) ? '・加工器具でも作れる' : ''); }
 
 // ---------- machines
 const unitCost = id => { const g = ING[INGI[id]]; return g.src[0] === 'market' || g.src[0] === 'seed' ? g.src[1] : g.value; };
@@ -2792,6 +2823,9 @@ const TUT = {
   m_orders:['依頼の掲示板', '住民の注文。<b>①書いてある料理を作る</b>（まだ作ったことがない料理は、名前・調理法・材料の数・材料1つがヒント。残りの材料はかまどで試して探す）<br><b>②棚に並べずに「届ける」</b>。作った直後の「できあがり」画面からも届けられる。棚に並べるとお客さんが買ってしまうので注意。<br>作れそうにない依頼は、1日1回「入れ替え」できる。<br>宴会の予約・評論家の記事・料理コンテストもここで見られる。'],
   m_forgehut:['鍛冶小屋', '古井戸の下に、ガルドの鍛冶小屋ができた。<br>小屋をタップすると、いつでも鍛冶（ツルハシ・武器・防具・付与・器）ができる。<br>「施設」タブの「⚒ 鍛冶屋ガルド」からも開ける。'],
   m_cap:['料理人の作る上限', 'レシピ帳の「上限」を押すたびに ∞→3→5→10→20→40 と変わる。<br>倉庫・棚にその料理が上限の数あると、料理人はもう作らない（材料の使いすぎを防ぐ）。'],
+  m_hill:['丘の農地', '裏の農場のいちばん下から行ける、奥の丘。下の<b>立て札</b>で土地を買う（1区→2区→3区の順）。<br>1区ごとに<b>畑8区画・果樹4本</b>が増える。畑の扱い（種・水やり・道具・農夫）は裏の農場と同じ。<br>植えた苗木は、木をタップして<b>「抜く」</b>と植え替えられる（苗木代の半分が戻る）。'],
+  m_hillsp:['特別な畑と動物', '<b>特別な畑</b>（2区：棚田・茶畑、3区：ぶどう棚・きのこの原木）は一度建てると、種なしで育ち続ける。収穫は2回分までためておけて、農夫がいると自動で収穫。<br><b>動物</b>（1区）：羊＝羊乳、ヤギ＝ヤギ乳、豚＝トリュフやきのこを掘る、アヒル＝卵。小屋を建てると2頭、増築で4頭。えさはいらない。<br>羊乳・ヤギ乳は<b>乳製品台</b>で、茶葉ともち米は<b>石臼</b>で加工できる。'],
+  sc_hill:['丘の農地', '下の立て札で土地を買う。草むらの区画は、まだ買っていない土地。'],
   m_tavern:['冒険者の酒場', 'ギルドの建物の中は冒険者の酒場。<br><b>カウンター</b>：冒険者の注文が毎日3件。倒した魔物の素材や、行った町の料理を頼まれることも。届けるとお金とギルドポイント。<br>奥の<b>訓練所</b>（ランクE）・<b>鑑定屋</b>（ランクD）・<b>闘技場</b>（ランクC）は、ギルドランクが上がると開く。'],
   m_train:['訓練所', '武器の種類（剣・短剣・槍…）ごとに熟練度がある。その種類の武器で魔物を倒すと上がり、Lvごとにその種類の攻撃+2%（最大Lv20）。<br>教官に稽古をつけてもらうと、お金で熟練度を上げられる（1日3回）。'],
   m_appraise:['鑑定屋', 'これから迷宮で拾う「希少」以上の武器は<b>未鑑定</b>。未鑑定のあいだはランダムな効果がはたらかない。<br>鑑定屋で鑑定すると効果が分かり、15%で効果が1つ増える。'],
@@ -3890,7 +3924,7 @@ function showDayResult(r) {
 }
 // night overlay for outdoor scenes
 function drawNight() {
-  if (!['outside', 'farm', 'wilds', 'port', 'desert', 'tea', 'capital', 'isle', 'guild', 'mranch', 'oldtown'].includes(scene) && !(isBio() && scene !== 'b_moon')) return;
+  if (!['outside', 'farm', 'hill', 'wilds', 'port', 'desert', 'tea', 'capital', 'isle', 'guild', 'mranch', 'oldtown'].includes(scene) && !(isBio() && scene !== 'b_moon')) return;
   const h = hmNow(), lerp = (x, a, b) => Math.max(0, Math.min(1, (x - a) / (b - a)));
   let day = 0, warm = 0, dark = 0;
   if (h >= 420 && h < 960) day = 1; else if (h >= 300 && h < 420) { day = lerp(h, 300, 420); warm = 1 - Math.abs(h - 380) / 80; } else if (h >= 960 && h < 1080) { day = 1 - lerp(h, 960, 1080); warm = lerp(h, 960, 1040); }
@@ -4671,6 +4705,7 @@ const MAN = [
     '店員を雇うと「自動販売」ができる。値付けの方針（安め・通常・強気）を選べる。',
     '店の格（屋台級→町の食堂→評判の店→名店→伝説の宵闇亭）は評判と売った皿数で上がり、客が増えて高い物も買われるようになる。',
     '評判は高くなるほど上がりにくい。'])},
+  {k:'hill', t:'丘の農地', c:() => unl('hill'), h:() => li(['店の格が「評判の店」になると、裏の農場のいちばん下の道から行ける。', '<b>土地</b>：1区 8,000G → 2区 20,000G → 3区 45,000G（下から順に）。1区ごとに畑8区画・果樹4本。', '<b>特別な畑</b>：棚田（米20個/10分・もち米12個/10分）・茶畑（茶葉12個/10分）は2区、ぶどう棚（ぶどう10個/15分）・きのこの原木（しいたけ・まいたけ・しめじ・えのき）は3区。種いらず、収穫2回分までたまる。雨の日は少し早い。農夫が自動で収穫。', '<b>動物</b>（1区）：羊（羊乳）・ヤギ（ヤギ乳）・豚（トリュフ25%、ほかはきのこ）・アヒル（卵）。小屋で2頭、増築で4頭。えさはいらない。', '<b>加工</b>：乳製品台＝ヤギ乳→ヨーグルト・チーズ、羊乳→クリームチーズ・チーズ。石臼＝茶葉3→抹茶、もち米2→餅5。', '<b>苗木を抜く</b>：果樹をタップ→「苗木を抜く」（2回押し）。苗木代の半分が戻る。果樹園の看板・丘の立て札の「丘の果樹」一覧からも抜ける。'])},
   {k:'tavern', t:'冒険者の酒場', c:() => unl('tavern'), h:() => li(['ギルドの建物の扉から入る。', '<b>カウンター</b>：冒険者の注文が毎朝3件（倒した魔物の素材の料理・行った町の料理も頼まれる）。届けると値打ち×2.2のお金とギルドポイント。', '<b>訓練所</b>（ランクE）：武器の種類ごとの熟練度。その種類の武器で倒すと+1（ボス+15）、Lvごとにその種類の攻撃+2%（最大Lv20）。稽古（300G×次のLv、+15）は1日3回。', '<b>鑑定屋</b>（ランクD）：開いた後に迷宮で拾う希少以上の武器は未鑑定（ランダムな効果がはたらかない）。鑑定は400G×(レア度+1)²、15%で効果が1つ増える。', '<b>闘技場</b>（ランクC）：勝ち抜き（5連戦・10連戦・無限、1日5回）。体力は持ち越しで波の合間に15%回復、倒れても何も失わない。勝った波の数だけメダル（5連戦の完走+5、10連戦+15）とお金、週の最高記録5・10・20・30波でごほうび。倒したボスの強化版（1.5倍）と1日1回ずつ再戦、勝つとメダル12とボスの素材×2。', '<b>メダルの交換所</b>：帰還の巻物・エリクサー・上級回復薬・宝石の袋・訓練の書・英雄の武器。'])},
   {k:'works', t:'武器の工房', c:() => gearSt().list.some(g => !isAcc(g)), h:() => li(['鍛冶屋の「🔨 工房」（武器を1つ持つと出る）。', '<b>鍛え上げ</b>：鍛冶屋で作った武器を、次の素材（銅→鉄→金→…→奈落晶）の同じ型へ。効果・付与・レア度はそのまま。鉱石は作る時の6割、お金は約半分。', '<b>合成</b>：同じ武器2本で、レア度が1つ上がる（並→良→希少→英雄→伝説）。効果と付与の枠も増える。2本目の付与の宝石は返ってくる。', '<b>効果の振り直し</b>：ランダムな効果のついた武器を初めて手に入れると使える。効果を1つ選んで引き直す（3,000G×レア度＋鉱石2個か石炭4個）。', '<b>分解</b>：装備していない武器を鉱石・石炭・付与した宝石に戻す。', '<b>ガルドの依頼</b>：週に1回。今まで掘った一番いい鉱石・石炭・お金を納めると、好きな種類の「ガルド銘」の武器（英雄・効果3つ・攻撃+10%、ここでしか手に入らない）。'])},
   {k:'brewer', t:'仕込み師', c:() => unl('machines'), h:() => li(['従業員タブで雇える（加工器具を1つ置いた後、最大4人）。', '加工器具の加工法の「🤖自動」で、器具ごとに自動で仕込む物を1つ決める。', '仕込み師1人につき20秒ごとに1件、予約の空きがある器具に仕込む。材料は倉庫から（作るリストの分は使わない）。足りない市場の材料は1日の仕入れ予算内で買う。', '得意技：手早い・節約上手（材料代の2割が戻る）・目利き（12%で1つ多い）・夜なべ（加工が10%速い）。'])},
@@ -4875,7 +4910,7 @@ const MAN = [
 ];
 let manSel = 'flow';
 const MAN_CAT = [['基本', ['flow', 'ctrl', 'cook', 'wish', 'forgehut', 'shop', 'orders', 'fac', 'xfer', 'src']], ['店', ['staff', 'reg', 'critic', 'decor', 'night', 'expand', 'town', 'money', 'contest', 'cellar', 'rival', 'fame', 'kiwami', 'airec', 'stall', 'merchant']],
-  ['農・釣り', ['farm', 'ranch', 'mach', 'brewer', 'breed', 'fish', 'fishmk', 'forage', 'season', 'quality']], ['冒険', ['mine', 'plgrow', 'scroll', 'works', 'tavern', 'monster', 'story', 'guild', 'arms', 'dungeon', 'secrets', 'abyss', 'tower']],
+  ['農・釣り', ['farm', 'hill', 'ranch', 'mach', 'brewer', 'breed', 'fish', 'fishmk', 'forage', 'season', 'quality']], ['冒険', ['mine', 'plgrow', 'scroll', 'works', 'tavern', 'monster', 'story', 'guild', 'arms', 'dungeon', 'secrets', 'abyss', 'tower']],
   ['町・遠征', ['expedition', 'desert', 'tea', 'capital', 'isle', 'caravan', 'mirror']], ['やり込み', []]];
 const manCatOf = k => (MAN_CAT.find(c => c[1].includes(k)) || MAN_CAT[MAN_CAT.length - 1])[0];
 let manCat = '基本', manQ = '';
@@ -6188,6 +6223,104 @@ function drawTavern() {
   for (const [k, x, y, fl] of npc) out.push({y, f:() => drawChar(k, x, y, fl)});
   return out;
 }
+// ===== v0.59 丘の農地（裏の農場の奥）：土地3区画・特別な畑4つ・動物4種
+const HILL_LAND = [{n:'1区', cost:8000, d:'畑8区画・果樹4本・動物の囲い'}, {n:'2区', cost:20000, d:'畑8区画・果樹4本・棚田と茶畑の場所'}, {n:'3区', cost:45000, d:'畑8区画・果樹4本・ぶどう棚と原木の場所'}];
+const HSPF = {
+  paddy:{n:'棚田', i:'🌾', z:2, cost:5000, r:[4, 182, 66, 242], st:[72, 212], crops:[['rice', 20, 600], ['mochigome', 12, 600]], d:'水を張った段々の田。米やもち米が一度にたくさん採れる'},
+  tea:{n:'茶畑', i:'🍵', z:2, cost:4000, r:[78, 182, 140, 242], st:[72, 212], crops:[['tea', 12, 600]], d:'茶葉が採れる。石臼で抹茶にできる'},
+  vine:{n:'ぶどう棚', i:'🍇', z:3, cost:6000, r:[4, 36, 66, 94], st:[72, 66], crops:[['grape', 10, 900]], d:'ぶどうが果樹より早く、たくさん採れる'},
+  logs:{n:'きのこの原木', i:'🍄', z:3, cost:3000, r:[78, 36, 140, 94], st:[72, 66], crops:[['shiitake', 10, 600], ['maitake', 8, 720], ['shimeji', 12, 600], ['enoki', 12, 600]], d:'しいたけ・まいたけ・しめじ・えのきから選んで育てる'},
+};
+const HANI = {
+  sheep:{n:'羊', shed:'羊小屋', cost:3000, out:'sheep_milk', per:300, r:[4, 404, 66, 452], st:[70, 428], area:[28, 424, 60, 446], d:'羊乳が採れる（乳製品台でクリームチーズやチーズに）'},
+  goat:{n:'ヤギ', shed:'ヤギ小屋', cost:2500, out:'goat_milk', per:240, r:[78, 404, 140, 452], st:[74, 428], area:[84, 426, 112, 446], d:'ヤギ乳が採れる（乳製品台でヨーグルトやチーズに）'},
+  pig:{n:'豚', shed:'豚小屋', cost:4000, out:'truffle', per:600, r:[4, 456, 66, 502], st:[70, 480], area:[28, 470, 60, 496], d:'土を掘って、トリュフやきのこを見つけてくる'},
+  duck:{n:'アヒル', shed:'アヒル小屋', cost:1500, out:'egg', per:300, r:[78, 456, 140, 502], st:[74, 480], area:[84, 472, 116, 496], d:'卵を産む'},
+};
+const hillSt = () => { if (!S.hill) S.hill = {lv:0, sp:{}, an:{}}; if (!S.hill.sp) S.hill.sp = {}; if (!S.hill.an) S.hill.an = {}; return S.hill; };
+const hspOn = k => hillLv() >= HSPF[k].z && !!hillSt().sp[k];
+const haniN = k => { const a = hillSt().an[k]; return a && hillLv() >= 1 ? a.lv * 2 : 0; };
+function hillUnl() { if (!unl('hill') && unl('ranch') && rankIdx() >= 2) unlockFeature('hill'); }
+function hillStep(dt, vis) {
+  const H = hillSt(); if (!H.lv) return; const rain = wxOn('rain') || wxOn('storm');
+  for (const k in HSPF) { const sp = H.sp[k]; if (!sp || !hspOn(k)) continue; const c = HSPF[k].crops.find(x => x[0] === sp.id) || HSPF[k].crops[0];
+    if ((sp.n || 0) >= 2) continue; sp.t = (sp.t || 0) + dt * (rain ? (k === 'logs' ? 1.3 : 1.2) : 1) * mrHelp('farm') * plcMul('farm');
+    while (sp.t >= c[2] && (sp.n || 0) < 2) { sp.t -= c[2]; sp.n = (sp.n || 0) + 1; } if ((sp.n || 0) >= 2) sp.t = 0; }
+  if (S.staff.farmer) for (const k in HSPF) { const sp = H.sp[k]; if (sp && hspOn(k) && sp.n >= 2) hspHarvest(k, false, vis); }
+  for (const k in HANI) { const cnt = haniN(k); if (!cnt) continue; const A = H.an[k], a = HANI[k];
+    A.t = (A.t === undefined ? a.per : A.t) - dt * cnt;
+    let guard = 0; while (A.t <= 0 && guard++ < 50) { A.t += a.per; let id = a.out;
+      if (k === 'pig') id = Math.random() < .25 * luckMul() ? 'truffle' : pick(['shiitake', 'maitake', 'shimeji']);
+      const g = Math.random() < .03 * luckMul(); withQ(1.5, () => add(g ? S.invG : S.inv, id, 1)); S.known.i[id] = true; rep_.ranch = (rep_.ranch || 0) + 1;
+      if (k === 'pig' && id === 'truffle') S.stat.truffle = (S.stat.truffle || 0) + 1;
+      if (vis && scene === 'hill') floatAt(a.st[0], a.st[1] - 14, (g ? '金色の' : '') + ingName(id) + ' +1', 'info'); } }
+}
+function hspHarvest(k, toBag, vis) { const sp = hillSt().sp[k]; if (!sp || !sp.n) return 0; const c = HSPF[k].crops.find(x => x[0] === sp.id) || HSPF[k].crops[0], n = c[1] * sp.n;
+  const gn = Math.random() < .05 * luckMul() ? 1 : 0;
+  withQ(1.8, () => { if (toBag) giveBag('i', c[0], false, n - gn); else add(S.inv, c[0], n - gn); if (gn) add(S.invG, c[0], gn); }); S.known.i[c[0]] = true;
+  sp.n = 0; rep_.harvested = (rep_.harvested || 0) + n; S.stat.hspN = (S.stat.hspN || 0) + n; dirty = true;
+  if ((vis || toBag) && scene === 'hill') floatAt(HSPF[k].st[0], HSPF[k].r[1] + 4, `${ingName(c[0])} +${n}`, 'info'); return n; }
+function openHillLand() {
+  tut('m_hill'); const H = hillSt();
+  const rows = HILL_LAND.map((L, z) => { const own = H.lv > z, next = H.lv === z;
+    return `<div class="row"><div class="t"><b>${own ? '✅' : next ? '🪧' : '🔒'} ${L.n}</b><span>${L.d}</span></div>${own ? '<div class="btn dis">購入済み</div>' : next ? `<div class="btn ${S.gold >= L.cost ? 'grn' : 'dis'}" data-hl="${z}">${fmt(L.cost)}G</div>` : `<div class="btn dis">${fmt(L.cost)}G</div>`}</div>`; }).join('');
+  modal('丘の農地　土地の売買', `<div class="p">下の区画から順に買える。買うとすぐ畑と果樹の場所が使える（畑の扱いは裏の農場と同じ。農夫も手伝う）。</div>` + rows + (H.lv ? `<div class="btn big" data-a="tr">🌳 丘の果樹をまとめて見る</div>` : ''), 'hillland');
+  bind('[data-hl]', d => { const z = +d.hl, L = HILL_LAND[z]; if (H.lv !== z || S.gold < L.cost) return; S.gold -= L.cost; H.lv = z + 1; sfx('ok'); dirty = true; closeModal();
+    toast(`丘の農地の<b>${L.n}</b>を買った！ ${z === 0 ? '畑8区画・果樹4本・動物の囲いが使える。' : z === 1 ? '畑8区画・果樹4本が増え、棚田と茶畑が建てられる。' : '畑8区画・果樹4本が増え、ぶどう棚と原木が建てられる。'}`, 4000); if (z === 0) tut('m_hillsp'); });
+  bind('[data-a=tr]', () => openOrchard(true));
+}
+function openSpecial(k) {
+  const f = HSPF[k], H = hillSt();
+  if (hillLv() < f.z) return toast(`🔒 ${f.n}：丘の農地の${HILL_LAND[f.z - 1].n}を買うと建てられる。`);
+  tut('m_hillsp'); const sp = H.sp[k];
+  if (!sp) { modal(f.n, `<div class="result"><div class="p">${f.d}。</div><div class="p">育つ物：${f.crops.map(c => `${ingName(c[0])}（${secT(c[2])}で${c[1]}個）`).join('・')}</div><div class="p">種はいらない。育つと自動で次を育て始める（収穫を2回分までためておける）。農夫がいると、たまったら収穫する。</div></div><div class="btn big ${S.gold >= f.cost ? 'grn' : 'dis'}" data-a="b">${f.n}を建てる　${fmt(f.cost)}G</div>`, 'hillsp');
+    bind('[data-a=b]', () => { if (S.gold < f.cost || H.sp[k]) return; S.gold -= f.cost; H.sp[k] = {id:f.crops[0][0], t:0, n:0}; sfx('ok'); dirty = true; toast(`${f.n}を建てた！`); openSpecial(k); }); return; }
+  const c = f.crops.find(x => x[0] === sp.id) || f.crops[0], left = (sp.n || 0) >= 2 ? 0 : c[2] - (sp.t || 0);
+  let html = `<div class="result"><div class="p">${f.d}。</div><div class="p">いま育てている物：<b>${ingName(c[0])}</b>（${secT(c[2])}で${c[1]}個）<br>${sp.n ? `<b>収穫${sp.n}回分</b>がたまっている（${c[1] * sp.n}個）` : '育成中'}${(sp.n || 0) < 2 ? `　次まであと${secT(Math.ceil(left))}` : '　（いっぱい。収穫すると次が育つ）'}</div></div>`;
+  html += `<div class="btn big ${sp.n ? 'grn' : 'dis'}" data-a="h">収穫する</div>`;
+  if (f.crops.length > 1) html += `<div class="p" style="margin-top:${U * 2}px">育てる物を変える（育成中の分は最初から）</div>` + f.crops.map(x => `<div class="row">${ingIc(x[0], U * 10, false, true)}<div class="t"><b>${ingName(x[0])}</b><span>${secT(x[2])}で${x[1]}個</span></div>${x[0] === sp.id ? '<div class="btn dis">育成中</div>' : `<div class="btn" data-cr="${x[0]}">変える</div>`}</div>`).join('');
+  modal(f.n, html, 'hillsp');
+  bind('[data-a=h]', () => { const n = hspHarvest(k, true); if (n) { sfx('pop'); syncBag(); } openSpecial(k); });
+  bind('[data-cr]', d => { if (sp.n) hspHarvest(k, true); sp.id = d.cr; sp.t = 0; sfx('pop'); dirty = true; toast(`${f.n}で${ingName(d.cr)}を育て始めた。`); openSpecial(k); });
+}
+function openPen(k) {
+  const a = HANI[k], H = hillSt();
+  if (hillLv() < 1) return toast(`🔒 ${a.shed}：丘の農地の1区を買うと建てられる。`);
+  tut('m_hillsp'); const A = H.an[k];
+  if (!A) { modal(a.shed, `<div class="result"><div style="display:flex;justify-content:center;gap:${U * 2}px">${charHTML(k, U * 14)}${charHTML(k, U * 14)}</div><div class="p">${a.n}：${a.d}。</div><div class="p">小屋を建てると${a.n}が2頭来る（増築で4頭）。丘の草を食べるので、えさはいらない。</div></div><div class="btn big ${S.gold >= a.cost ? 'grn' : 'dis'}" data-a="b">${a.shed}を建てる　${fmt(a.cost)}G</div>`, 'hillpen');
+    bind('[data-a=b]', () => { if (S.gold < a.cost || H.an[k]) return; S.gold -= a.cost; H.an[k] = {lv:1, t:a.per}; sfx('ok'); dirty = true; toast(`${a.shed}を建てた！ ${a.n}が2頭やってきた。`); closeModal(); if (scene === 'hill') buildActors(); }); return; }
+  const up = Math.round(a.cost * 1.5), n = A.lv * 2, each = Math.round(a.per / 60);
+  modal(a.shed, `<div class="result"><div style="display:flex;justify-content:center;gap:${U}px;flex-wrap:wrap">${Array(n).fill(charHTML(k, U * 12)).join('')}</div><div class="p">${a.n} ${n}頭：${a.d}。<br>1頭あたり約${each}分に1つ。品物は食材の箱に直接入る。</div></div>` +
+    (A.lv < 2 ? `<div class="btn big ${S.gold >= up ? 'grn' : 'dis'}" data-a="up">増築して4頭にする　${fmt(up)}G</div>` : '<div class="p">いっぱいまで増築した。</div>'), 'hillpen');
+  bind('[data-a=up]', () => { if (S.gold < up || A.lv >= 2) return; S.gold -= up; A.lv = 2; sfx('ok'); dirty = true; toast(`${a.shed}を増築した！ ${a.n}が4頭になった。`); closeModal(); if (scene === 'hill') buildActors(); });
+}
+SCENES.hill = {name:'丘の農地', short:'丘の農地', objs:[
+  {id:'hexit', lb:'裏の農場に戻る', r:[56, 508, 88, 528], st:[72, 512], act:() => go('farm', 72, 372)},
+  {id:'hland', lb:'土地の売買（立て札）', r:[90, 506, 114, 524], st:[84, 514], act:() => openHillLand()},
+  ...PLOTS.slice(24).map((p, k) => ({id:'hplot' + k, r:[p.x - 1, p.y - 1, p.x + p.w + 1, p.y + p.h + 1], st:[p.x + 6, p.y + 16], act:() => tapPlot(24 + k), plot:24 + k})),
+  ...TREEPOS.slice(4).map(([x, y], k) => ({id:'htree' + k, lb:'果樹', r:[x - 8, y - 16, x + 8, y + 4], st:[x, y + 8], act:() => tapTree(4 + k), tree:4 + k})),
+  ...Object.entries(HSPF).map(([k, f]) => ({id:'hsp_' + k, get lb() { return hillLv() < f.z ? `🔒 ${f.n}（${HILL_LAND[f.z - 1].n}を買うと建てられる）` : hillSt().sp[k] ? f.n + (hillSt().sp[k].n ? `（収穫${hillSt().sp[k].n}回分）` : '') : `${f.n}を建てる（${fmt(f.cost)}G）`; }, r:f.r, st:f.st, act:() => openSpecial(k)})),
+  ...Object.entries(HANI).map(([k, a]) => ({id:'han_' + k, get lb() { return hillLv() < 1 ? `🔒 ${a.shed}` : hillSt().an[k] ? `${a.shed}（${a.n}${haniN(k)}頭）` : `${a.shed}を建てる（${fmt(a.cost)}G）`; }, r:a.r, st:a.st, act:() => openPen(k)})),
+]};
+WALKDEF.hill = {areas:[[2, 32, 142, 526]], blocks:[[2, 34, 66, 92], [78, 34, 142, 92], [2, 180, 66, 240], [78, 180, 142, 240], [2, 400, 67, 506], [77, 400, 142, 506], [0, 504, 56, 528], [88, 504, 144, 528],
+  ...HILL_TP.flat().map(([x, y]) => [x - 7, y - 4, x + 7, y + 4])]};
+SCENES.farm.objs.push({id:'hillway', lb:'丘の農地へ', r:[60, 370, 84, 396], st:[72, 374], cond:() => unl('hill'), act:() => { tut('m_hill'); go('hill', 72, 512); }});
+function drawHill() {
+  const out = [], lv = hillLv(), H = hillSt();
+  if (lv < 3 && IMG.hill_ov3) ctx.drawImage(IMG.hill_ov3, 0, 30);
+  if (lv < 2 && IMG.hill_ov2) ctx.drawImage(IMG.hill_ov2, 0, 176);
+  for (let k = 0; k < 24; k++) { const i = 24 + k, p = PLOTS[i], z = Math.floor(k / 8); if (z >= lv) { if (z === 0) lockArea(p.x - 1, p.y - 1, p.x + p.w + 1, p.y + p.h + 1, false, k % 4 === 0); continue; } drawPlotCrop(i); }
+  for (let k = 0; k < 12; k++) { const i = 4 + k, z = Math.floor(k / 4); if (z >= lv) continue; const t = S.trees[i], [x, y] = TREEPOS[i]; if (!t) continue; const st = t.g >= 1200 ? 2 : t.g >= 400 ? 1 : 0;
+    out.push({y:y + 4, f:() => { drawChar('tree' + st, x, y + 4); for (let q = 0; q < (t.fruit || 0); q++) drawIcon(ING[INGI[t.id]].icon, x - 6 + q * 4, y - 12 + (q % 2) * 3, 6); }}); }
+  if (lv < 1) { for (const [x, y] of HILL_TP[0]) lockArea(x - 9, y - 4, x + 9, y + 6, false, false); }
+  for (const k in HSPF) { const f = HSPF[k], r = f.r; if (lv < f.z) continue; const sp = H.sp[k];
+    if (!sp) { lockArea(r[0], r[1], r[2], r[3], true); continue; }
+    const c = f.crops.find(x => x[0] === sp.id) || f.crops[0];
+    if (sp.n) { const cx = (r[0] + r[2]) / 2 - 5; drawIcon(ING[INGI[c[0]]].icon, cx, r[1] + 2 + Math.sin(tNow * 3) * .8, 10); if (sp.n >= 2 && Math.sin(tNow * 4) > .5) { ctx.fillStyle = '#fffbd0'; ctx.fillRect(cx + 11, r[1] + 2, 1, 1); ctx.fillRect(cx + 10, r[1] + 3, 3, 1); ctx.fillRect(cx + 11, r[1] + 4, 1, 1); } }
+    const pr = sp.n >= 2 ? 1 : (sp.t || 0) / c[2]; ctx.fillStyle = '#140c08'; ctx.fillRect(r[0] + 2, r[3] - 3, r[2] - r[0] - 4, 2); ctx.fillStyle = sp.n ? '#e8c860' : '#8aa05a'; ctx.fillRect(r[0] + 2, r[3] - 3, Math.round((r[2] - r[0] - 4) * Math.min(1, pr)), 1); }
+  for (const k in HANI) { const r = HANI[k].r; if (lv < 1 || !H.an[k]) lockArea(r[0] + 1, r[1] + 1, r[2] - 1, r[3] - 3, true, lv >= 1); }
+  return out;
+}
 function openWorks() {
   tut('m_works'); const G = gearSt(), ws = G.list.filter(g => !isAcc(g)), rr = wkRrOn();
   const tabs = [['up', '鍛え上げ'], ['fuse', '合成'], ...(rr ? [['rr', '振り直し']] : []), ['dis', '分解'], ['req', 'ガルドの依頼']]; if (!tabs.some(t => t[0] === wkTab)) wkTab = 'up';
@@ -7044,8 +7177,8 @@ let TLOG = [];
 function tlogPush(msg) { const t = msg.replace(/<br>/g, ' ').replace(/<[^>]+>/g, ''); if (!t.trim()) return; TLOG.unshift({t, at:S && S.t || 0}); if (TLOG.length > 60) TLOG.length = 60; }
 function todoList() {
   const out = [], add_ = (i, t, go_) => out.push({i, t, go:go_});
-  const ripe = S.plots.slice(0, plotCount()).filter(ready).length; if (ripe) add_('🌾', `農場の作物が${ripe}つ実っている`, 'farm');
-  const empty = S.plots.slice(0, plotCount()).filter(p => !p.seed).length; if (empty && unl('quality')) add_('🌱', `農場の空いた区画が${empty}つ`, 'farm');
+  const ripe = PIDX().filter(j => ready(S.plots[j])).length; if (ripe) add_('🌾', `農場の作物が${ripe}つ実っている`, 'farm');
+  const empty = PIDX().filter(j => !S.plots[j].seed).length; if (empty && unl('quality')) add_('🌱', `農場の空いた区画が${empty}つ`, 'farm');
   if (S.fac.cellar && S.cellar && S.cellar.slots) { const n = S.cellar.slots.filter(x => x && celDone(x)).length; if (n) add_('🍷', `地下貯蔵庫の熟成が${n}台できあがった`, 'cellar'); }
   if (unl('orders') && S.orders) { const n = S.orders.filter(o => haveDish('r' + o.ri, false) + haveDish('r' + o.ri, true) >= o.n).length; if (n) add_('📜', `届けられる依頼が${n}件（掲示板）`, 'outside');
     else if (!(S.stat.orders > 0) && S.orders.length) { const o = S.orders[0]; add_('📜', `依頼：${REC[o.ri].name}を${o.n}皿作って届ける（${recHint(o.ri)}）`, 'outside'); } }
@@ -7063,7 +7196,7 @@ function todoList() {
   if (unl('dungeon') && S.dg) { const wk = Math.floor(gday() / 7); const ks = DG_KEYS.filter(k => dgOpen(k) && (S.dg.kb[k] || 0) > 0 && S.dg.wk[k] !== wk); if (ks.length) add_('👑', `今週のボスのごほうびがまだ：${ks.map(k => DGD[k].n).join('・')}`, null); }
   return out;
 }
-const TRAVEL = [['interior', '宵闇亭（店内）', 109, 108, () => true], ['outside', '店の外（霧月通り）', 72, 300, () => true], ['farm', '裏の農場', 72, 50, () => true],
+const TRAVEL = [['interior', '宵闇亭（店内）', 109, 108, () => true], ['outside', '店の外（霧月通り）', 72, 300, () => true], ['farm', '裏の農場', 72, 50, () => true], ['hill', '丘の農地', 72, 512, () => unl('hill')],
   ['cellar', '地下貯蔵庫', 124, 66, () => S.fac.cellar > 0], ['upstairs', '2階', 38, 266, () => S.fac.upstairs > 0], ['guild', '冒険者ギルド', 72, 296, () => unl('guild')], ['mranch', '魔物牧場と薬草園', 72, 306, () => unl('mranch')], ['museum', '博物館', 72, 276, () => unl('museum')], ['oldtown', '旧市街', 74, 310, () => unl('restore')]];
 function travelOk() { return !['mine', 'mfarm'].includes(scene) && !isBio() && !TOWNC[scene] && !fishSt; }
 function goTravel(k) {
@@ -8143,7 +8276,7 @@ async function boot() {
   bootMark('はじめ');
   if (bootPrev && !bootPrev.done && Date.now() - bootPrev.t < 600000) BOOTERR.push('前回の起動が「' + bootPrev.st + '」で止まった');
   layout();
-  const ks = ['atlas','world','sil','gold','chars','charsUI','bg_interior','bg_outside','bg_farm','bg_farm2','logo','machines','workshop','rocks','bg_farm3','bg_farm4','bg_mine0','bg_mine1','bg_mine2','bg_mine3','bg_mine4','bg_mine5','bg_fpond','bg_fpier','bg_flake','tackle','bg_upstairs','stairs','bg_wilds','bg_stall','wagon','decor','bed','bg_b_river','bg_b_flower','bg_b_marsh','bg_b_volcano','bg_b_snow','bg_b_moon','bmap','gimmick','dog','rival','bg_cellar','cellarobj','trapdoor','bg_deep_deep','bg_deep_mist','bg_deep_dark','bg_deep_vein','bg_deep_den','bg_deep_garden','tower_a0','tower_a1','tower_a2','tower_a3','tower_a4','tower_ext','tower_far','tower_off','bg_port','exp_map','exp_map2','bg_desert','exp_map3','exp_map4','exp_map5','bg_tea','bg_capital','bg_isle','bg_guild1','bg_guild2','bg_guild3','bg_guild4','bg_guild5','guild_sign','cara_banner','wagons','cmark','bosses','curse_statue','bg_mranch','guild_sign2','bg_museum','bg_oldtown','bld_chapel','bld_library','bld_school','bld_theater','bld_bathhouse','bld_garden','bld_smithy','bld_gate','bg_mirror','place','bg_mfarm','bg_dg_mirror','bg_dgb_mirror','dg_gate_mirror','mgate','cportraits','steles','sealdoor','digspot','bigchest','crackwall','bg_vault','bg_ancient','moonstall','forge','stall_spr','bg_tavern','bg_arena','tv_boards',...['l0','l1','l2','l3','l4','l5','deep','ship','temple','shrine','castle','volcano'].map(t => 'rocks_' + t),...['ship','temple','shrine','castle','volcano'].flatMap(k => ['bg_dg_' + k, 'bg_dgb_' + k, 'dg_gate_' + k])];
+  const ks = ['atlas','world','sil','gold','chars','charsUI','bg_interior','bg_outside','bg_farm','bg_farm2','logo','machines','workshop','rocks','bg_farm3','bg_farm4','bg_mine0','bg_mine1','bg_mine2','bg_mine3','bg_mine4','bg_mine5','bg_fpond','bg_fpier','bg_flake','tackle','bg_upstairs','stairs','bg_wilds','bg_stall','wagon','decor','bed','bg_b_river','bg_b_flower','bg_b_marsh','bg_b_volcano','bg_b_snow','bg_b_moon','bmap','gimmick','dog','rival','bg_cellar','cellarobj','trapdoor','bg_deep_deep','bg_deep_mist','bg_deep_dark','bg_deep_vein','bg_deep_den','bg_deep_garden','tower_a0','tower_a1','tower_a2','tower_a3','tower_a4','tower_ext','tower_far','tower_off','bg_port','exp_map','exp_map2','bg_desert','exp_map3','exp_map4','exp_map5','bg_tea','bg_capital','bg_isle','bg_guild1','bg_guild2','bg_guild3','bg_guild4','bg_guild5','guild_sign','cara_banner','wagons','cmark','bosses','curse_statue','bg_mranch','guild_sign2','bg_museum','bg_oldtown','bld_chapel','bld_library','bld_school','bld_theater','bld_bathhouse','bld_garden','bld_smithy','bld_gate','bg_mirror','place','bg_mfarm','bg_dg_mirror','bg_dgb_mirror','dg_gate_mirror','mgate','cportraits','steles','sealdoor','digspot','bigchest','crackwall','bg_vault','bg_ancient','moonstall','forge','stall_spr','bg_tavern','bg_arena','tv_boards','bg_hill','hill_ov2','hill_ov3',...['l0','l1','l2','l3','l4','l5','deep','ship','temple','shrine','castle','volcano'].map(t => 'rocks_' + t),...['ship','temple','shrine','castle','volcano'].flatMap(k => ['bg_dg_' + k, 'bg_dgb_' + k, 'dg_gate_' + k])];
   introMsg('読み込み中…（画像）'); let nl = 0; await Promise.all(ks.map(k => loadImg(k, A[k]).then(() => { if (++nl % 20 === 0) introMsg(`読み込み中…（画像 ${nl}/${ks.length}）`); })));
   bootMark('画像の準備'); introMsg('読み込み中…（画像の準備）'); await new Promise(r => setTimeout(r, 20));
   for (const k of ['atlas','sil','gold','charsUI','tackle']) URL_[k] = BLOBU[k] || ('data:image/png;base64,' + A[k]);
