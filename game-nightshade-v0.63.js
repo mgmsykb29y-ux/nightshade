@@ -183,6 +183,7 @@ const UNL = {
   secret:{n:'迷宮の隠し部屋', i:'🧱', d:'迷宮やダンジョンの階に、ひび割れた壁が現れるようになった。崩すと昔の冒険者の隠し部屋がある。', tut:'secret'},
   moon:{n:'満月の夜', i:'🌕', d:'毎週木曜の夜は満月。広場に月の兎の夜店が出て、迷宮には月光スライムが現れ、魔物がなつきやすくなる。', tut:'moon'},
   stele:{n:'石碑と封印の扉', i:'🪨', d:'5つの町の広場に、古い石碑が見えるようになった。紋を集めると、地下迷宮B1の封印の扉が開く。', tut:'stele'},
+  shugyo:{n:'霊峰の修練の塔・技・武器の成長', i:'🗼', d:'奈落の深層B60にたどり着き、古井戸の奥の転移の石から「霊峰の修練の塔」へ行けるようになった。武器の<b>技</b>（ゲージ）と<b>武器の成長・覚醒</b>、<b>銘の武器</b>（12系列）も始まる。', tut:'m_tower'},
   hill:{n:'丘の農地', i:'⛰', d:'裏の農場のいちばん下の道から、奥の「丘の農地」へ行けるようになった。土地を買うと、畑・果樹・特別な畑・動物が増やせる。', tut:'m_hill'},
   tavern:{n:'冒険者の酒場', i:'🍺', d:'ギルドの建物の中が酒場になった。カウンターで冒険者たちの注文を受けて料理を届けると、お金とギルドポイント。', tut:'m_tavern'},
   train:{n:'訓練所', i:'🗡', d:'酒場の奥の訓練所が開いた。武器の種類ごとに熟練度があり、使って倒すほど・稽古するほど、その種類の攻撃が上がる。', tut:'m_train'},
@@ -902,6 +903,7 @@ function step(dt, vis) {
   if (typeof v45Tick === 'function') v45Tick();
   if (typeof v48Tick === 'function') v48Tick();
   if (typeof hillStep === 'function') { hillUnl(); hillStep(dt, vis); }
+  if (typeof twUnl === 'function') twUnl();
   if (S.aucPre) aucPreStep();
   // ranch
   const hens = (S.fac.coop || 0) * 2, cows = S.fac.barn || 0;
@@ -1075,7 +1077,7 @@ function deliverOrder(i, re) {
 }
 // ====================================================== rendering
 let tNow = 0, camY = 0;
-const bgImg = () => scene === 'guild' ? IMG['bg_guild' + guildStage()] : scene === 'mine' ? (FL && FL.arena ? IMG.bg_arena : FL && FL.vault ? IMG.bg_vault : FL && FL.ak ? IMG.bg_ancient : FL && FL.dg ? IMG[(FL.boss ? 'bg_dgb_' : 'bg_dg_') + FL.dg] : FL && FL.v ? IMG['bg_deep_' + FL.v] : IMG['bg_mine' + layerOf(FL ? FL.f : 1)]) : scene === 'farm' ? IMG[S.fac.orchard ? (S.fac.greenhouse ? 'bg_farm4' : 'bg_farm3') : (S.fac.greenhouse ? 'bg_farm2' : 'bg_farm')] : IMG['bg_' + scene];
+const bgImg = () => scene === 'guild' ? IMG['bg_guild' + guildStage()] : scene === 'mine' ? (FL && FL.arena ? IMG.bg_arena : FL && FL.vault ? IMG.bg_vault : FL && FL.ak ? IMG.bg_ancient : FL && FL.dg === 'tower' ? IMG[(FL.boss ? 'bg_twb' : 'bg_tw') + twBand(Math.min(30, FL.f))] : FL && FL.dg ? IMG[(FL.boss ? 'bg_dgb_' : 'bg_dg_') + FL.dg] : FL && FL.v ? IMG['bg_deep_' + FL.v] : IMG['bg_mine' + layerOf(FL ? FL.f : 1)]) : scene === 'farm' ? IMG[S.fac.orchard ? (S.fac.greenhouse ? 'bg_farm4' : 'bg_farm3') : (S.fac.greenhouse ? 'bg_farm2' : 'bg_farm')] : IMG['bg_' + scene];
 const sceneH = () => bgImg().height;
 let VIEW_BOTTOM = 224; const VIEW_TOP = 30, OFF = 14; // world y16 -> screen row 30
 function drawChar(k, x, y, flip = false, seated = false, world = true) {
@@ -1319,6 +1321,7 @@ function chips() {
   { const hi = heldItem(); if (hi && hi.t === 'ing' && hi.id === 'moon_extract') h += `<div class="chip blu" data-c="moon">月光エキスを使う</div>`; }
   if (S.tmap && S.tmap.maps.length && unl('tmap') && scene !== 'mine') h += `<div class="chip" data-c="tmap">🗺地図${S.tmap.maps.length}</div>`;
   if (scene === 'mine') {
+    if (skOn() && eqW()) { const sk = mineState().sk || 0; h += `<div class="chip ${sk >= 100 ? 'red' : 'off'}" data-c="skill">⚔技${sk >= 100 ? '！' : ' ' + Math.floor(sk) + '%'}</div>`; }
     h += `<div class="chip grn" data-c="eat">食べる</div>`; if (unl('herb') || MK_POTS.some(id => haveIng(id))) h += `<div class="chip" data-c="pot">🧪薬</div>`; if (haveIng('scroll')) h += `<div class="chip blu" data-c="scroll">巻物で帰る</div>`;
   } else if (scene === 'farm' || scene === 'hill') {
     const sp = scenePlots(scene), n = sp.filter(j => ready(S.plots[j])).length, e = sp.filter(j => !S.plots[j].seed).length;
@@ -1361,6 +1364,7 @@ function chipAct(c) {
   else if (c === 'todo') openTodo();
   else if (c === 'tmap') openTmList();
   else if (c === 'moon') { if (takeIng('moon_extract', false, 1)) { S.luck3T = S.t + 1800; sfx('ok'); syncBag(); toast('✨ 月光エキスを使った。30分間、金色の食材がとても出やすい。', 3500); } }
+  else if (c === 'skill') { useSkill(); }
   else if (c === 'scroll') { if (takeIng('scroll', false, 1)) { closeModal(); scrollReturn(); } }
   dirty = true; chips();
 }
@@ -2865,6 +2869,9 @@ const TUT = {
   m_forgehut:['鍛冶小屋', '古井戸の下に、ガルドの鍛冶小屋ができた。<br>小屋をタップすると、いつでも鍛冶（ツルハシ・武器・防具・付与・器）ができる。<br>「施設」タブの「⚒ 鍛冶屋ガルド」からも開ける。'],
   m_cap:['料理人の作る上限', 'レシピ帳の「上限」を押すたびに ∞→3→5→10→20→40 と変わる。<br>倉庫・棚にその料理が上限の数あると、料理人はもう作らない（材料の使いすぎを防ぐ）。'],
   m_res:['通りの住民', '通りの住民は、時間によって顔ぶれが変わる。話しかけると1日1回 親しさが上がり、親しさ3ごとにその人らしい物をくれる。<br>好きな物を持って近づくと「贈る」ができる（説明書「通りの住民」に好きな物の一覧）。'],
+  m_tower:['霊峰の修練の塔', '古井戸（地下迷宮の入口）の「🗼霊峰の修練の塔へ」から行ける。全30階＋頂。どの階も敵を全部倒すと階段が出る。10階・20階・頂に<b>階の主</b>。<br><b>鎧</b>（青いゲージ）を着た敵は<b>技でしか鎧を割れない</b>。盾持ちはふつうの攻撃を7割防ぐ。<br>階を制すると<b>修練の証</b>。証は覚醒と、好きな<b>銘の武器</b>との交換に使う。'],
+  m_skill:['技', '攻撃を当てる（または攻撃を受ける）と、足元のゲージがたまる。満タンになったら、画面上の<b>「⚔技！」</b>を押そう。<br>技は武器の種類で決まる（剣＝回転斬り、短剣＝連撃、槍＝突進突き、槌・斧＝大地割り、弓＝矢の雨、杖＝魔法陣、包丁＝解体、鎌＝大旋風、鞭＝縛り打ち）。<b>銘の武器</b>は技に追加効果がのる。'],
+  m_wgrow:['武器の成長と覚醒', '装備している武器は、魔物を倒すと経験がたまり<b>Lv</b>が上がる（Lvごとに攻撃+2%、Lv20まで）。<br>Lv20の<b>銘・伝説・ボスの武器</b>は、鍛冶屋の工房で<b>覚醒</b>できる（攻撃×1.2・技1.5倍・付与の枠+1、名前に「真・」）。覚醒のあとも、使うほど上限なしで+1%ずつ強くなる。'],
   m_hill:['丘の農地', '裏の農場のいちばん下から行ける、奥の丘。下の<b>立て札</b>で土地を買う（1区→2区→3区の順）。<br>1区ごとに<b>畑8区画・果樹4本</b>が増える。畑の扱い（種・水やり・道具・農夫）は裏の農場と同じ。<br>植えた苗木は、木をタップして<b>「抜く」</b>と植え替えられる（苗木代の半分が戻る）。'],
   m_hillsp:['特別な畑と動物', '<b>特別な畑</b>（2区：棚田・茶畑、3区：ぶどう棚・きのこの原木）は一度建てると、種なしで育ち続ける。収穫は2回分までためておけて、農夫がいると自動で収穫。<br><b>動物</b>（1区）：羊＝羊乳、ヤギ＝ヤギ乳、豚＝トリュフやきのこを掘る、アヒル＝卵。小屋を建てると2頭、増築で4頭。えさはいらない。<br>羊乳・ヤギ乳は<b>乳製品台</b>で、茶葉ともち米は<b>石臼</b>で加工できる。'],
   sc_hill:['丘の農地', '下の立て札で土地を買う。草むらの区画は、まだ買っていない土地。'],
@@ -4783,6 +4790,15 @@ const MAN = [
     '店の格（屋台級→町の食堂→評判の店→名店→伝説の宵闇亭）は評判と売った皿数で上がり、客が増えて高い物も買われるようになる。',
     '評判は高くなるほど上がりにくい。'])},
   {k:'res', t:'通りの住民', c:() => true, h:() => li(['店の前の通りには住民が歩いている。近づいて「話す」と、1日1回 親しさが+1。親しさ3ごとに、その人らしい物をくれる（ミラ・シャズは種やレシピ）。', '好きな物を持って近づくと「贈る」（ミラ・ガルド・シャズは鉱石や宝石、ほかの人は食材）。好きな物なら親しさ+6とお礼のお金。', '時間で顔ぶれが変わる：パン屋のポーラ（朝6〜14時）・花売りのリリ（8〜17時）・郵便屋ピップ（9〜12時・14〜16時）・学者のエルマー（10〜18時）・吟遊詩人カノン（15〜23時）・老漁師トク（5〜9時・16〜19時）・踊り子のサラ（18〜24時）・夜回りのボルツ（19〜翌4時）。', '好きな物：ポーラ＝小麦・蜂蜜・いちご／リリ＝ラベンダー・蜂蜜・いちご／ボルツ＝酒・牛肉・コーヒー豆／カノン＝ワイン・酒・蜂蜜／ピップ＝りんご・パン・牛乳／トク＝酒・米・梅干し／エルマー＝茶葉・抹茶・コーヒー豆／サラ＝チョコレート・いちご・ワイン'])},
+  {k:'shugyo', t:'技・武器の成長・修練の塔', c:() => unl('shugyo'), h:() => li(['<b>解放</b>：奈落の深層のB60にたどり着くと。古井戸の画面に「霊峰の修練の塔へ」。',
+    '<b>鎧</b>：青いゲージ。技は鎧を2倍の速さで削る。ふつうの攻撃は鎧を3割しか削れず、鎧があるうちは体力に15%しか通らない。',
+    '<b>技</b>：攻撃を当てると+7（弓や双剣など回数の多い武器は回数ぶん）、攻撃を受けると+4で、足元のゲージがたまる。満タンで画面上の「⚔技！」。' + Object.entries(SKILLS).map(([k, v]) => `${WT_N[k]}＝${v.n}（${v.d}）`).join('／') + '。技は会心20%、鎧を割れる。',
+    '<b>銘の武器</b>（12系列×9種類＝108本）：' + SER_KEYS.map(k => `${SER[k].n}＝${SER[k].d}（技：${SER[k].sk}）`).join('／'),
+    '<b>手に入れ方</b>：修練の塔の階の主（必ず1本）・魔物（0.6%）・宝箱、修練の証30と交換（好きな銘と種類）、奈落の深層の魔物（ごくまれ）、専用ダンジョンのボス（12%）。',
+    '<b>効果の強さ</b>：拾った武器の効果は、それぞれ強さが60〜140%（【%】で表示）。深い所で拾うほど上振れ。工房の「数値の振り直し」で1つずつ振り直せる（石炭×3・2,000G×(レア度+1)）。',
+    '<b>武器の成長</b>：装備中の武器で倒すと経験（ふつう1＋深さ/25、ボス40）。次のLvまで 20＋10×Lv。Lvごとに攻撃+2%（Lv20で+38%）。',
+    '<b>覚醒</b>（銘・伝説・ボスの武器、Lv20）：工房で 奈落晶×5・修練の証×10・50,000G。攻撃×1.2・技1.5倍・付与の枠+1、名前に「真・」と光る絵。覚醒のあとは 300＋20×覚醒Lv の経験ごとに+1%（上限なし）。',
+    '<b>修練の塔</b>：全30階＋頂（31階）。魔物の強さは、あなたの深層の最深記録の85%の深さに合わせて決まる（B60より浅い記録ならB60相当）。魔物は小鬼（大群れ）・盾持ちの石兵（ふつうの攻撃を7割防ぐ。ひるんでいる間は防げない）・鎧武者（鎧）・修行僧の亡霊・山の鷹。10階＝石の門番ゴーレム、20階＝鎧の大将、頂＝天狗の大師範（どれも鎧つき）。階を初めて制すると証+3（2回目から+1）、階の主は証+10（頂+20）と賞金と銘の武器。11階・21階から登れる。呪いもかけられる。'])},
   {k:'hill', t:'丘の農地', c:() => unl('hill'), h:() => li(['店の格が「評判の店」になると、裏の農場のいちばん下の道から行ける。', '<b>土地</b>：1区 8,000G → 2区 20,000G → 3区 45,000G（下から順に）。1区ごとに畑8区画・果樹4本。', '<b>特別な畑</b>：棚田（米20個/10分・もち米12個/10分）・茶畑（茶葉12個/10分）は2区、ぶどう棚（ぶどう10個/15分）・きのこの原木（しいたけ・まいたけ・しめじ・えのき）は3区。種いらず、収穫2回分までたまる。雨の日は少し早い。農夫が自動で収穫。', '<b>動物</b>（1区）：羊（羊乳）・ヤギ（ヤギ乳）・豚（トリュフ25%、ほかはきのこ）・アヒル（卵）。小屋で2頭、増築で4頭。えさはいらない。', '<b>加工</b>：乳製品台＝ヤギ乳→ヨーグルト・チーズ、羊乳→クリームチーズ・チーズ。石臼＝茶葉3→抹茶、もち米2→餅5。', '<b>苗木を抜く</b>：果樹をタップ→「苗木を抜く」（2回押し）。苗木代の半分が戻る。果樹園の看板・丘の立て札の「丘の果樹」一覧からも抜ける。'])},
   {k:'tavern', t:'冒険者の酒場', c:() => unl('tavern'), h:() => li(['ギルドの建物の扉から入る。', '<b>カウンター</b>：冒険者の注文が毎朝3件（倒した魔物の素材の料理・行った町の料理も頼まれる）。届けると値打ち×2.2のお金とギルドポイント。', '<b>訓練所</b>（ランクE）：武器の種類ごとの熟練度。その種類の武器で倒すと+1（ボス+15）、Lvごとにその種類の攻撃+2%（最大Lv20）。稽古（300G×次のLv、+15）は1日3回。', '<b>鑑定屋</b>（ランクD）：開いた後に迷宮で拾う希少以上の武器は未鑑定（ランダムな効果がはたらかない）。鑑定は400G×(レア度+1)²、15%で効果が1つ増える。', '<b>闘技場</b>（ランクC）：勝ち抜き（5連戦・10連戦・無限、1日5回）。体力は持ち越しで波の合間に15%回復、倒れても何も失わない。勝った波の数だけメダル（5連戦の完走+5、10連戦+15）とお金、週の最高記録5・10・20・30波でごほうび。倒したボスの強化版（1.5倍）と1日1回ずつ再戦、勝つとメダル12とボスの素材×2。', '<b>メダルの交換所</b>：帰還の巻物・エリクサー・上級回復薬・宝石の袋・訓練の書・英雄の武器。'])},
   {k:'works', t:'武器の工房', c:() => gearSt().list.some(g => !isAcc(g)), h:() => li(['鍛冶屋の「🔨 工房」（武器を1つ持つと出る）。', '<b>鍛え上げ</b>：鍛冶屋で作った武器を、次の素材（銅→鉄→金→…→奈落晶）の同じ型へ。効果・付与・レア度はそのまま。鉱石は作る時の6割、お金は約半分。', '<b>合成</b>：同じ武器2本で、レア度が1つ上がる（並→良→希少→英雄→伝説）。効果と付与の枠も増える。2本目の付与の宝石は返ってくる。', '<b>効果の振り直し</b>：ランダムな効果のついた武器を初めて手に入れると使える。効果を1つ選んで引き直す（3,000G×レア度＋鉱石2個か石炭4個）。', '<b>分解</b>：装備していない武器を鉱石・石炭・付与した宝石に戻す。', '<b>ガルドの依頼</b>：週に1回。今まで掘った一番いい鉱石・石炭・お金を納めると、好きな種類の「ガルド銘」の武器（英雄・効果3つ・攻撃+10%、ここでしか手に入らない）。'])},
@@ -4990,7 +5006,7 @@ const MAN = [
 ];
 let manSel = 'flow';
 const MAN_CAT = [['基本', ['flow', 'ctrl', 'res', 'cook', 'wish', 'forgehut', 'shop', 'orders', 'fac', 'xfer', 'src']], ['店', ['staff', 'reg', 'critic', 'decor', 'night', 'expand', 'town', 'money', 'contest', 'cellar', 'rival', 'fame', 'kiwami', 'airec', 'stall', 'merchant']],
-  ['農・釣り', ['farm', 'hill', 'ranch', 'mach', 'brewer', 'breed', 'fish', 'fishmk', 'forage', 'season', 'quality']], ['冒険', ['mine', 'plgrow', 'scroll', 'works', 'tavern', 'monster', 'story', 'guild', 'arms', 'dungeon', 'secrets', 'abyss', 'tower']],
+  ['農・釣り', ['farm', 'hill', 'ranch', 'mach', 'brewer', 'breed', 'fish', 'fishmk', 'forage', 'season', 'quality']], ['冒険', ['shugyo', 'mine', 'plgrow', 'scroll', 'works', 'tavern', 'monster', 'story', 'guild', 'arms', 'dungeon', 'secrets', 'abyss', 'tower']],
   ['町・遠征', ['expedition', 'desert', 'tea', 'capital', 'isle', 'caravan', 'mirror']], ['やり込み', []]];
 const manCatOf = k => (MAN_CAT.find(c => c[1].includes(k)) || MAN_CAT[MAN_CAT.length - 1])[0];
 let manCat = '基本', manQ = '';
@@ -6053,6 +6069,7 @@ function addGear(id, r = 0, quiet, nfx) {
   const G = gearSt(); const uid = (G.n = (G.n || 0) + 1) + 100000; const acc = !!ACCI[id];
   const fx = []; if (!acc) { const k = nfx != null ? Math.min(nfx, RFX_POOL.length) : r >= 4 ? 3 : r >= 3 ? 2 : r >= 2 ? 1 + (Math.random() < .5 ? 1 : 0) : r; for (let i = 0; i < k; i++) { const f = pick(RFX_POOL.filter(x => !fx.includes(x))); fx.push(f); } }
   const g = {uid, id, r, fx, en:acc ? [] : Array(RAR_SLOT[r]).fill(null)}; G.list.push(g);
+  if (!acc) { const b = FL ? ((FL.eqf || FL.f || 0) / 100) : 0; g.fq = fx.map(() => fxRoll(b)); if (WEAPI[id].fx) g.q0 = fxRoll(b); }
   const first = !G.seen[id]; G.seen[id] = 1; dirty = true;
   if (!quiet) { tut(acc ? 'acc' : 'gear'); toast(`${acc ? '💍' : '⚔'} <b style="color:${RAR_C[r]}">${acc ? '' : RAR_N[r] + '・'}${gDef(g).name}</b>を手に入れた！${first ? '（図鑑に登録）' : ''}`, 3500); }
   if (first) gearMilestone();
@@ -6062,8 +6079,8 @@ function addGear(id, r = 0, quiet, nfx) {
 function gearMilestone() { const n = Object.keys(gearSt().seen).length, G = gearSt(), k = Math.floor(n / 25); if (k > (G.ms || 0)) { const g = 5000 * k; G.ms = k; S.gold += g; popStory(`<div class="tth">📖 装備図鑑 ${n}種</div><div class="ttx">集めた装備が${k * 25}種に届いた！ ごほうび +${fmt(g)}G</div>`); } }
 const eqW = () => { const G = gearSt(); return G.eq.w ? gearOf(G.eq.w) : null; };
 function gearFx() {
-  const G = gearSt(), out = {}; const ad = k => { if (k) out[k] = (out[k] || 0) + 1; };
-  const w = eqW(); if (w) { ad(WEAPI[w.id].fx); if (!w.ua) w.fx.forEach(ad); w.en.forEach(ad); }
+  const G = gearSt(), out = {}; const ad = (k, q = 1) => { if (!k) return; if (k.startsWith('s_')) { const sr = SER[k.slice(2)]; if (sr) for (const c in sr.fx) out[c] = (out[c] || 0) + sr.fx[c] * q; return; } out[k] = (out[k] || 0) + q; };
+  const w = eqW(); if (w) { ad(WEAPI[w.id].fx, w.q0 || 1); if (!w.ua) w.fx.forEach((k, i) => ad(k, (w.fq && w.fq[i]) || 1)); w.en.forEach(k => ad(k)); }
   for (const s of ['r1', 'r2', 'n']) { const g = G.eq[s] && gearOf(G.eq[s]); if (g) ad(ACCI[g.id].fx); }
   if (out.yoiyami && !isNightNow()) delete out.yoiyami;
   if (S.mine) potFx(out);
@@ -6075,7 +6092,7 @@ function accMul0(k) { const f = gearFx(); if (k === 'luck' && S.ult) return (1 +
 function wStats(g) {
   g = g || eqW(); if (!g) return {r:12, cd:.5, m:1, base:1, sub:null, name:'素手'};
   const d = WEAPI[g.id], st = SUBST[d.sub] || SUBST.onehand;
-  return {...st, base:2 + d.tier * 3, rm:RAR_M[g.r] * (g.gm ? 1.1 : 1), sub:d.sub, name:d.name, tier:d.tier};
+  return {...st, base:2 + d.tier * 3, rm:RAR_M[g.r] * (g.gm ? 1.1 : 1) * wGrowMul(g), sub:d.sub, name:d.name, tier:d.tier};
 }
 function wAtkVal(g) { const s = wStats(g); return Math.round(s.base * s.m * (s.rm || 1) * (s.hits || 1)); }
 function atkMulFx(f) { return rsAtk() * (buffOn('p_atk') ? 1.25 : 1) * (buffOn('p_atk2') ? 1.5 : 1) * (1 + .1 * dgRingN()) * (1 + .5 * 0) * (S.ult ? 1 + ultPerm('atk') : 1) * (buffOn('ult') ? 1.5 : 1) * (1 + .1 * (f.might || 0) + .15 * (f.hero || 0) + .25 * (f.star || 0) + .4 * (f.yoiyami || 0) + .08 * (f.atk || 0) + .05 * (f.all || 0) + (f.star && ACCI.neck_star ? 0 : 0)); }
@@ -6083,16 +6100,19 @@ function defMulFx() { const f = gearFx(); return compDef() * rsDef() * (buffOn('
 const gearAccOn = id => { const G = gearSt(); return ['r1', 'r2', 'n'].some(s => G.eq[s] && gearOf(G.eq[s]) && gearOf(G.eq[s]).id === id); };
 function buffDurMul() { const f = gearFx(), s = wStats(); return ultPerm('buff') + 1 + (s.bf || 0) + .3 * (f.magic || 0) + .6 * (f.magic2 || 0) + .5 * (f.martha || 0) + (gearAccOn('neck_omamori') ? .4 : 0); }
 let PROJ = [], wSwingT = 0;
-function hitMon(t, dmg, st, f, crit) {
+function hitMon(t, dmg, st, f, crit, sk, noChain) {
   if (!FL || !FL.mons.includes(t)) return;
+  if (t.arm > 0) { t.arm = Math.max(0, t.arm - dmg * (sk ? 2 : .3)); if (t.arm <= 0) { floatAt(t.x, t.y - 28, '鎧が割れた！', 'info'); sfx('break'); } else if (!sk) dmg *= .15; }   // v0.63 鎧：技は2倍で削る（ふつうの攻撃は3割しか削れず、体力には15%）
+  else if (MONT[t.k] && MONT[t.k].shield && !sk && !(t.kb > 0)) dmg *= .3;
   dmg = Math.max(1, Math.round(dmg * medalMul('adv'))); t.hp -= dmg;
-  const kb = (st.kb || 4) + (f.knock ? 6 : 0), dx = t.x - player.x, dy = t.y - player.y, dd = Math.hypot(dx, dy) || 1;
+  if (f.thunder && !noChain) { const o = FL.mons.filter(o => o !== t && Math.hypot(o.x - t.x, o.y - t.y) < 26)[0]; if (o) hitMon(o, dmg * .4 * Math.min(2, f.thunder), st, f, false, sk, true); }
+  const kb = (st.kb || 4) + (f.knock ? 6 * Math.min(2, f.knock) : 0), dx = t.x - player.x, dy = t.y - player.y, dd = Math.hypot(dx, dy) || 1;
   if (t.boss) t.hitT = .08; else { t.kb = .15 + (st.stun || 0) + (f.knock ? .2 : 0); const nx = t.x + dx / dd * kb, ny = t.y + dy / dd * kb * .5;   // v0.46: 壁や岩の向こうへ吹き飛ばさない
     if (MONT[t.k].fly ? (nx > 12 && nx < 132 && ny > 40 && ny < 236) : walkable('mine', nx | 0, ny | 0)) { t.x = nx; t.y = ny; } }
   floatAt(t.x, t.y - 18, (crit ? '会心！' : '') + '-' + dmg, crit ? 'info' : 'bad');
-  if (f.burn) { t.burn = 3; t.bdps = dmg * .25; }
+  if (f.burn) { t.burn = 3; t.bdps = Math.max(t.bdps || 0, dmg * .25 * Math.min(3, f.burn)); }
   if (f.chill || st.slow) t.slow = 2.5;
-  if (f.poison) { t.pois = 4; t.pdps = dmg * .15; }
+  if (f.poison) { t.pois = 4; t.pdps = Math.max(t.pdps || 0, dmg * .15 * Math.min(3, f.poison)); }
   const dr = .05 * (f.drain || 0) + (f.yoiyami ? .05 : 0); if (dr) { const M = mineState(); M.hp = Math.min(M.hpMax, M.hp + dmg * dr); }
   if (t.hp <= 0) killMon(t, null);
 }
@@ -6101,7 +6121,7 @@ function doAttack(m) {
   let dmg = st.base * st.m * (st.rm || 1) * (buffOn('atk') ? 1.5 : 1) * forgeMulS() * monDmgMul(m.k) * atkMulFx(f) * wmMul() * deepMul();
   const crCh = .05 + (st.cr || 0) + .1 * (f.crit || 0) + .2 * (f.crit2 || 0) + .25 * (f.moon || 0) + .1 * (f.hero || 0) + .15 * (f.martha || 0) + (gearAccOn('neck_fang') ? .1 : 0);
   const crit = Math.random() < crCh; if (crit) dmg *= f.moon ? 3 : 2;
-  wSwingT = .22; sfx('pop');
+  wSwingT = .22; sfx('pop'); skGain(7 * (st.hits || 1) * (1 + .1 * (f.swift || 0)));
   if (st.proj) PROJ.push({x:player.x, y:player.y - 9, tx:m.x, ty:m.y - 6, t:0, k:st.proj});
   const others = FL.mons.filter(o => o !== m);
   for (let h = 0; h < (st.hits || 1); h++) hitMon(m, dmg, st, f, crit);
@@ -6143,11 +6163,11 @@ function rollGearDrop(fl, minR = 0, legend) {
 const gearPrice = d => Math.round(300 * Math.pow(d.tier || 3, 2.2) / 10) * 10;
 const gearSellP = g => { const d = gDef(g); return isAcc(g) ? 1500 : Math.round(gearPrice(d) * .3 * (1 + g.r * .5)); };
 function gearRowHTML(g, act) { const d = gDef(g), acc = isAcc(g), G = gearSt(), on = Object.values(G.eq).includes(g.uid);
-  return `<div class="row">${icHTML(d.icon, U * 10, 'atlas')}<div class="t"><b style="color:${RAR_C[g.r]}">${acc ? '' : RAR_N[g.r] + '・'}${g.ua ? '<span style="color:#c8a0e8">🔮未鑑定・</span>' : ''}${g.gm ? '⚒ガルド銘の' : ''}${d.name}${on ? '　<span style="color:#e8c050">装備中</span>' : ''}</b><span>${acc ? d.desc : `${WT_N[d.type]}／${WSUB[d.sub].n}　攻撃${wAtkVal(g)}${[d.fx, ...g.fx].filter(Boolean).length ? '　' + [d.fx, ...g.fx].filter(Boolean).map(k => (WFX[k] || k).split('：')[0].split('（')[0]).join('・') : ''}${g.en.some(Boolean) ? '　付与：' + g.en.filter(Boolean).map(k => (WFX[k] || k).split('：')[0].split('（')[0]).join('・') : ''}`}</span></div>${act || `<div class="btn" data-gd="${g.uid}">見る</div>`}</div>`; }
+  return `<div class="row">${icHTML(acc ? d.icon : gIc(g), U * 10, 'atlas')}<div class="t"><b style="color:${RAR_C[g.r]}">${acc ? '' : RAR_N[g.r] + '・'}${g.ua ? '<span style="color:#c8a0e8">🔮未鑑定・</span>' : ''}${g.gm ? '⚒ガルド銘の' : ''}${acc ? d.name : gNm(g)}${!acc && skOn() ? ` <span style="color:#8ad0c8">Lv${g.lv || 1}${g.aw ? '・覚醒' + (g.alv || 0) : ''}</span>` : ''}${on ? '　<span style="color:#e8c050">装備中</span>' : ''}</b><span>${acc ? d.desc : `${WT_N[d.type]}／${WSUB[d.sub].n}　攻撃${wAtkVal(g)}${[d.fx, ...g.fx].filter(Boolean).length ? '　' + [[d.fx, g.q0], ...g.fx.map((k, i) => [k, g.fq && g.fq[i]])].filter(x => x[0]).map(([k, q]) => (WFX[k] || k).split('：')[0].split('（')[0] + (q != null ? Math.round(q * 100) + '%' : '')).join('・') : ''}${g.en.some(Boolean) ? '　付与：' + g.en.filter(Boolean).map(k => (WFX[k] || k).split('：')[0].split('（')[0]).join('・') : ''}`}</span></div>${act || `<div class="btn" data-gd="${g.uid}">見る</div>`}</div>`; }
 let gearTab = 'w';
 function openGear() {
   const G = gearSt(); tut('gear');
-  const slot = (k, lb) => { const g = G.eq[k] && gearOf(G.eq[k]); return `<div style="flex:1;text-align:center" data-gs="${k}"><div style="font-size:${U * 3.4}px;color:var(--sub)">${lb}</div>${g ? icHTML(gDef(g).icon, U * 11, 'atlas') : `<div style="width:${U * 11}px;height:${U * 11}px;margin:auto;border:1px dashed #6a5a4a;border-radius:4px"></div>`}<div style="font-size:${U * 3.4}px;color:${g ? RAR_C[g.r] : 'var(--sub)'}">${g ? gDef(g).name : 'なし'}</div></div>`; };
+  const slot = (k, lb) => { const g = G.eq[k] && gearOf(G.eq[k]); return `<div style="flex:1;text-align:center" data-gs="${k}"><div style="font-size:${U * 3.4}px;color:var(--sub)">${lb}</div>${g ? icHTML(isAcc(g) ? gDef(g).icon : gIc(g), U * 11, 'atlas') : `<div style="width:${U * 11}px;height:${U * 11}px;margin:auto;border:1px dashed #6a5a4a;border-radius:4px"></div>`}<div style="font-size:${U * 3.4}px;color:${g ? RAR_C[g.r] : 'var(--sub)'}">${g ? (isAcc(g) ? gDef(g).name : gNm(g)) : 'なし'}</div></div>`; };
   const st = wStats(), f = gearFx();
   const list = G.list.filter(g => gearTab === 'w' ? !isAcc(g) : isAcc(g)).sort((a, b) => (gDef(b).tier || 0) - (gDef(a).tier || 0) || b.r - a.r);
   modal('装備', `<div style="display:flex;gap:2px;margin-bottom:${U}px">${slot('w', '武器')}${slot('r1', '指輪1')}${slot('r2', '指輪2')}${slot('n', '首飾り')}</div>
@@ -6161,9 +6181,11 @@ function openGear() {
 function openGearDetail(uid) {
   const G = gearSt(), g = gearOf(uid); if (!g) return openGear(); const d = gDef(g), acc = isAcc(g), on = Object.entries(G.eq).find(([k, v]) => v === uid);
   const fxl = acc ? `<div class="p">${d.desc}</div>` : `<div class="p">${WT_N[d.type]}／<b>${WSUB[d.sub].n}</b>：${WSUB[d.sub].d}<br>攻撃 ${wAtkVal(g)}　レア度 <b style="color:${RAR_C[g.r]}">${RAR_N[g.r]}</b>　手に入れ方：${srcJP(d.src)}</div>
-    ${d.fx ? `<div class="p">固有の効果：${WFX[d.fx]}</div>` : ''}${g.fx.length ? `<div class="p">ランダムな効果：${g.fx.map(k => WFX[k]).join('／')}</div>` : ''}
+    ${d.fx ? `<div class="p">固有の効果：${WFX[d.fx]} ${fxQ(g.q0)}</div>` : ''}${g.fx.length ? `<div class="p">ランダムな効果：${g.fx.map((k, i) => WFX[k] + ' ' + fxQ(g.fq && g.fq[i])).join('／')}</div>` : ''}
+    ${(g.q0 != null || g.fq) ? '<div class="p" style="color:var(--sub)">【%】は効果の強さ（60〜140%。深い所で拾うほど上振れ。工房の「数値の振り直し」で振り直せる）</div>' : ''}
+    ${skOn() ? `<div class="p">⚔ 技：<b>${SKILLS[d.type].n}</b>（${SKILLS[d.type].d}${g.aw ? '・覚醒で1.5倍' : ''}）${serOf(d) ? `<br>銘の追加効果：${SER[serOf(d)].sk}` : ''}</div><div class="p">武器Lv ${g.lv || 1}${g.aw ? `・覚醒Lv ${g.alv || 0}` : '／20'}（攻撃×${wGrowMul(g).toFixed(2)}）　経験 ${Math.floor(g.xp || 0)}/${wNeed(g)}${!g.aw && (g.lv || 1) >= 20 ? (canAwaken(d) ? '　<b style="color:#ffc850">覚醒できる（工房）</b>' : '　（この武器は覚醒できない：銘・伝説・ボスの武器だけ）') : ''}</div>` : ''}
     <div class="p">付与の枠：${g.en.map(k => k ? WFX[k] : '（空き）').join('／')}</div>`;
-  modal(d.name, `<div style="text-align:center">${icHTML(d.icon, U * 18, 'atlas')}</div>${fxl}
+  modal(acc ? d.name : gNm(g), `<div style="text-align:center">${icHTML(acc ? d.icon : gIc(g), U * 18, 'atlas')}</div>${fxl}
     ${on ? '<div class="btn big" data-a="off">外す</div>' : acc ? (d.slot === 'ring' ? '<div style="display:flex;gap:3px"><div class="btn big grn" data-a="r1" style="flex:1">指輪1に装備</div><div class="btn big grn" data-a="r2" style="flex:1">指輪2に装備</div></div>' : '<div class="btn big grn" data-a="n">首飾りに装備</div>') : '<div class="btn big grn" data-a="w">装備する</div>'}
     ${on ? '' : `<div class="btn" data-a="sell" style="margin-top:${U}px">売る（${fmt(gearSellP(g))}G）</div>`}<div class="btn" data-a="back" style="margin-top:${U}px">もどる</div>`, 'geard');
   bind('[data-a=back]', () => openGear());
@@ -6171,7 +6193,7 @@ function openGearDetail(uid) {
   for (const k of ['w', 'r1', 'r2', 'n']) bind(`[data-a=${k}]`, () => { for (const s in G.eq) if (G.eq[s] === uid) delete G.eq[s]; G.eq[k] = uid; sfx('ok'); dirty = true; openGear(); });
   bind('[data-a=sell]', () => { const p = gearSellP(g); G.list = G.list.filter(x => x !== g); S.gold += p; sfx('coin'); toast(`${d.name}を売った +${fmt(p)}G`); dirty = true; openGear(); });
 }
-const srcJP = s => s === 'forge' ? '鍛冶屋で作る' : s === 'legend' ? '伝説（奈落の深層B100より深い所で、ごくまれ）' : s.startsWith('drop') ? (s === 'drop:deep' ? '奈落の深層で拾う' : `迷宮のB${+s.slice(5) * 10 + 1}より深い所で拾う`) : s.startsWith('town') ? `遠征：${TOWNC[s.slice(5)].n}の武器屋` : s.startsWith('guild') ? `ギルドの交換所（ランク${GUILD_RN[+s.slice(6)]}から）` : `昇格試験（ランク${GUILD_RN[+s.slice(5)]}）のごほうび`;
+const srcJP = s => s.startsWith('series') ? '霊峰の修練の塔（階の主・宝箱・魔物）／修練の証の交換／奈落の深層・専用ダンジョンでまれに' : s === 'forge' ? '鍛冶屋で作る' : s === 'legend' ? '伝説（奈落の深層B100より深い所で、ごくまれ）' : s.startsWith('drop') ? (s === 'drop:deep' ? '奈落の深層で拾う' : `迷宮のB${+s.slice(5) * 10 + 1}より深い所で拾う`) : s.startsWith('town') ? `遠征：${TOWNC[s.slice(5)].n}の武器屋` : s.startsWith('guild') ? `ギルドの交換所（ランク${GUILD_RN[+s.slice(6)]}から）` : `昇格試験（ランク${GUILD_RN[+s.slice(5)]}）のごほうび`;
 let wfTab = 'sword';
 function openWForge() {
   tut('w_forge'); const M = mineState(), types = unl('arms') ? Object.keys(WT_N) : ['sword'];
@@ -6429,7 +6451,7 @@ function drawHill() {
 }
 function openWorks() {
   tut('m_works'); const G = gearSt(), ws = G.list.filter(g => !isAcc(g)), rr = wkRrOn();
-  const tabs = [['up', '鍛え上げ'], ['fuse', '合成'], ...(rr ? [['rr', '振り直し']] : []), ['dis', '分解'], ['req', 'ガルドの依頼']]; if (!tabs.some(t => t[0] === wkTab)) wkTab = 'up';
+  const tabs = [['up', '鍛え上げ'], ['fuse', '合成'], ...(rr ? [['rr', '振り直し']] : []), ...(skOn() ? [['aw', '覚醒'], ['rv', '数値の振り直し']] : []), ['dis', '分解'], ['req', 'ガルドの依頼']]; if (!tabs.some(t => t[0] === wkTab)) wkTab = 'up';
   let html = `<div class="seg many">${tabs.map(([k, n]) => `<div class="${wkTab === k ? 'on' : ''}" data-wk="${k}">${n}</div>`).join('')}</div>`;
   if (wkTab === 'up') { html += `<div class="p">ガルド「打った武器は、次の鉱石で鍛え上げられる。効果も付与もそのままだ」（鍛冶屋で作れる武器だけ。作り直すより安い）</div>`;
     html += ws.map(g => { const d = gDef(g), nx = wkNext(d); if (!nx) return ''; const c = wkUpCost(nx), lock = !mineState().ever[c.ore], ok = !lock && needOk(c.need) && S.gold >= c.fee;
@@ -6447,16 +6469,27 @@ function openWorks() {
     html += `<div class="p">ガルド「週に一度、いい鉱石を持ってきてくれたら、わしが本気で打つ。<b>ガルド銘</b>の武器はここでしか手に入らんぞ」</div>
       <div class="row"><div class="t"><b>今週の依頼${q.done ? '（済み・来週また）' : ''}</b><span>${needTxt(need)}　${fmt(q.fee)}G</span><span>ごほうび：好きな種類の<b>ガルド銘の武器</b>（${MAT_ORDER[q.t - 1] ? WEAP.find(w => w.src === 'forge' && w.tier === q.t).name.replace(/^(.+?)の.*/, '$1') : ''}・英雄・効果3つ・攻撃+10%）</span></div></div>`;
     if (!q.done) html += `<div class="p">打ってほしい種類：</div><div style="display:flex;flex-wrap:wrap;gap:${U * .6}px">${Object.values(WSUB).filter(x => unl('arms') || x.id === 'onehand').map(x => `<div class="btn ${ok ? 'grn' : 'dis'}" data-gq="${x.id}" style="font-size:.85em">${x.n}</div>`).join('')}</div>`; }
+  if (wkTab === 'aw') { const T = twSt(), need = {naraku:5}, fee = 50000, mk = 10;
+    html += `<div class="p">ガルド「Lv20まで使い込んだ銘・伝説・ボスの武器は、<b>覚醒</b>させられる。攻撃×1.2、技は1.5倍、付与の枠も1つ増える。そのあとも使うほど少しずつ強くなるぞ」<br>（奈落晶×5・修練の証×${mk}・${fmt(fee)}G。修練の証 いま${T.mk}）</div>`;
+    html += ws.filter(g => canAwaken(gDef(g)) && !g.aw).map(g => { const ok = (g.lv || 1) >= 20 && needOk(need) && T.mk >= mk && S.gold >= fee; return gearRowHTML(g, `<div class="btn ${ok ? 'grn' : 'dis'}" data-aw="${g.uid}" style="font-size:.85em">${(g.lv || 1) >= 20 ? '覚醒' : 'Lv' + (g.lv || 1) + '/20'}</div>`); }).join('') || '<div class="p">覚醒できる武器（銘・伝説・ボスの武器）を持っていない。</div>'; }
+  if (wkTab === 'rv') { html += `<div class="p">ガルド「効果の<b>強さ</b>だけを打ち直す。効果の種類は変わらん」（1つにつき 石炭×3・2,000G×(レア度+1)）</div>`;
+    html += ws.filter(g => g.q0 != null || (g.fq && g.fq.length)).map(g => { const d = gDef(g), fee = 2000 * (g.r + 1), ok = haveIng('coal') >= 3 && S.gold >= fee, items = [...(g.q0 != null ? [['0', d.fx, g.q0]] : []), ...g.fx.map((k, i) => [String(i + 1), k, g.fq && g.fq[i]])];
+      return gearRowHTML(g, '') + `<div style="display:flex;flex-wrap:wrap;gap:${U * .6}px;margin:-${U * .6}px 0 ${U * 1.4}px ${U * 12}px">${items.map(([i, k, q]) => `<div class="btn ${ok ? '' : 'dis'}" data-rv="${g.uid}:${i}" style="font-size:.8em">🎲 ${(WFX[k] || k).split('：')[0].split('（')[0]} ${Math.round((q || 1) * 100)}%</div>`).join('')}<span style="font-size:.85em;color:var(--sub)">${fmt(fee)}G＋石炭×3</span></div>`; }).join('') || '<div class="p">数値のある効果がついた武器がない。</div>'; }
   modal('武器の工房', html, 'works');
+  bind('[data-aw]', d => { const g = gearOf(+d.aw), T = twSt(), need = {naraku:5}, fee = 50000; if (!g || g.aw || (g.lv || 1) < 20 || !needOk(need) || T.mk < 10 || S.gold < fee) return;
+    takeIng('naraku', false, 5); T.mk -= 10; S.gold -= fee; g.aw = 1; g.alv = 0; g.xp = 0; g.en.push(null); sfx('fanfare'); dirty = true; S.stat.awaken = (S.stat.awaken || 0) + 1;
+    popStory(`<div class="tth">✨ 覚醒！</div><div style="text-align:center">${icHTML(gIc(g), U * 22, 'atlas')}</div><div class="ttx"><b>${gNm(g)}</b>になった！<br>攻撃×1.2・技が1.5倍・付与の枠+1。これからも使うほど少しずつ強くなる。</div>`, () => openWorks()); });
+  bind('[data-rv]', d => { const [u, i] = d.rv.split(':'), g = gearOf(+u), fee = 2000 * (g.r + 1); if (!g || haveIng('coal') < 3 || S.gold < fee) return; takeIng('coal', false, 3); S.gold -= fee;
+    const b = .3, nq = fxRoll(b); if (i === '0') g.q0 = nq; else { if (!g.fq) g.fq = g.fx.map(() => 1); g.fq[+i - 1] = nq; } sfx('ok'); dirty = true; toast(`🎲 強さ → <b>${Math.round(nq * 100)}%</b>`, 2500); openWorks(); });
   bind('[data-wk]', d => { wkTab = d.wk; openWorks(); });
   bind('[data-up2]', d => { const g = gearOf(+d.up2), nx = wkNext(gDef(g)); if (!nx) return; const c = wkUpCost(nx); if (!mineState().ever[c.ore] || !needOk(c.need) || S.gold < c.fee) return;
     for (const [k, n] of Object.entries(c.need)) takeIng(k, false, n); S.gold -= c.fee; g.id = nx.id; G.seen[nx.id] = 1; sfx('ok'); dirty = true; toast(`⚒ ${nx.name}に鍛え上げた！`); openWorks(); });
   bind('[data-fu]', d => { const [a, b] = d.fu.split(':').map(Number), g = gearOf(a), h = gearOf(b); if (!g || !h || g.r >= 4 || wkEq(h)) return; const fee = 2000 * (g.r + 1) * (g.r + 1); if (S.gold < fee) return;
-    S.gold -= fee; g.r++; const want = g.r >= 4 ? 3 : g.r >= 3 ? 2 : 1; while (g.fx.length < want) { const f = pick(RFX_POOL.filter(x => !g.fx.includes(x))); if (!f) break; g.fx.push(f); }
+    S.gold -= fee; g.r++; const want = g.r >= 4 ? 3 : g.r >= 3 ? 2 : 1; while (g.fx.length < want) { const f = pick(RFX_POOL.filter(x => !g.fx.includes(x))); if (!f) break; g.fx.push(f); if (g.fq) g.fq.push(fxRoll()); }
     while (g.en.length < RAR_SLOT[g.r]) g.en.push(null); h.en.forEach(k => { if (k) { const gem = Object.keys(ENCH).find(x => ENCH[x] === k); if (gem) add(S.inv, gem, 2); } });
     G.list = G.list.filter(x => x !== h); sfx('ok'); dirty = true; toast(`✨ ${RAR_N[g.r]}の${gDef(g).name}になった！`); openWorks(); });
   bind('[data-rr]', d => { const [u, i] = d.rr.split(':').map(Number), g = gearOf(u), dd = gDef(g), ore = dd.src === 'forge' ? MAT_ORE[dd.mat] : 'coal', n = dd.src === 'forge' ? 2 : 4, fee = 3000 * (g.r + 1); if (haveIng(ore) < n || S.gold < fee) return;
-    takeIng(ore, false, n); S.gold -= fee; const old = g.fx[i], f = pick(RFX_POOL.filter(x => !g.fx.includes(x))); if (f) g.fx[i] = f; sfx('ok'); dirty = true; toast(`🎲 ${(WFX[old] || old).split('：')[0]} → <b>${(WFX[g.fx[i]] || g.fx[i]).split('：')[0]}</b>`, 3000); openWorks(); });
+    takeIng(ore, false, n); S.gold -= fee; const old = g.fx[i], f = pick(RFX_POOL.filter(x => !g.fx.includes(x))); if (f) { g.fx[i] = f; if (g.fq) g.fq[i] = fxRoll(); } sfx('ok'); dirty = true; toast(`🎲 ${(WFX[old] || old).split('：')[0]} → <b>${(WFX[g.fx[i]] || g.fx[i]).split('：')[0]}</b>`, 3000); openWorks(); });
   bind('[data-ds]', d => { const g = gearOf(+d.ds); if (!g || wkEq(g)) return; const out = wkDis(g); for (const k in out) { add(S.inv, k, out[k]); S.known.i[k] = true; } G.list = G.list.filter(x => x !== g); sfx('break'); dirty = true; toast('分解した：' + Object.entries(out).map(([k, n]) => ingName(k) + '×' + n).join('・')); openWorks(); });
   bind('[data-gq]', d => { const q = grReq(), need = {[q.ore]:q.n, coal:q.coal}; if (q.done || !needOk(need) || S.gold < q.fee) return; const w = WEAP.find(x => x.sub === d.gq && x.src === 'forge' && x.tier === q.t); if (!w) return;
     for (const [k, n] of Object.entries(need)) takeIng(k, false, n); S.gold -= q.fee; q.done = 1; addGear(w.id, 3, false, 3); const g = G.list[G.list.length - 1]; g.gm = 1; sfx('fanfare'); dirty = true; openWorks(); });
@@ -6715,7 +6748,8 @@ function applyCurse(fl, cl) {
 function genDgFloor(dg, f) {
   const M = mineState(), G = DGD[dg], D_ = dgSt(), cl = M.cl || 0;
   const fl = {f, dg, eqf:G.eqf + f, rocks:[], mons:[], ladder:null, broken:0, special:null, elevator:false, lake:null, chest:null, lava:false, blk:G.blk.slice()};
-  if (f > (G.fl || 10)) {   // 最奥：ボスの間
+  if (dg === 'tower') genTwFloor(fl, f);
+  else if (f > (G.fl || 10)) {   // 最奥：ボスの間
     fl.boss = true; fl.blk = [];
     if (dg === 'volcano') fl.walkFn = (x, y) => (((x - 72) / 50) ** 2 + ((y - 158) / 40) ** 2 < 1) || (x >= 66 && x <= 78 && y < 124);
     const b = mkMon(G.boss, 72, 150, 1, 0); b.boss = 1; b.hp = b.max = Math.round(b.max * (1 + .4 * cl)); b.atk = Math.round(b.atk * (1 + .2 * cl)); fl.mons.push(b);
@@ -6741,7 +6775,7 @@ function dgEnterMsg() {
   if (FL.boss) { tut('dg_boss'); const B = FL.mons.find(m => m.boss); if (B) setTimeout(() => toast(`👑 <b>${MONT[B.k].n}</b>　${BOSSP[B.k].say}`, 4000), 400); }
   else if (FL.f === (G.fl || 10)) toast(`${G.n} ${FL.f}階：この先が最奥。階段の先にボスが待つ。`, 3500);
 }
-function dgReturn() { const D_ = dgSt(); if (D_.ret === 'guild') return ['guild', 64, 264]; const t = D_.ret || 'port'; return [t, ...(TOWNC[t].arrive || [72, 260])]; }
+function dgReturn() { const D_ = dgSt(); if (D_.ret === 'guild') return ['guild', 64, 264]; if (D_.ret === 'well') return ['outside', 46, 222]; const t = D_.ret || 'port'; return [t, ...(TOWNC[t].arrive || [72, 260])]; }
 function exitDg() { const M = mineState(), D_ = dgSt(), r = dgReturn(); M.hp = M.hpMax; M.st = M.stMax; M.trip = {}; M.cl = 0; FL = null; D_.cur = null; player.mining = player.target = null; go(r[0], r[1], r[2]); }
 function enterDg(dg, f) { const M = mineState(); M.hp = M.hpMax; M.st = M.stMax + (gearAccOn('ring_stam') ? 20 : 0); M.trip = {}; M.buff = {}; M.revive = 0; M.charm = 0; M.seraRev = 0; genDgFloor(dg, f); closeModal(); go('mine', 72, 52); setTimeout(dgEnterMsg, 300); }
 function curseUI(cur) {
@@ -6776,6 +6810,7 @@ function dgChest() {
 }
 // ---- ボスの動き
 function playerHurt(atk, mul = 1) {
+  { const M0 = mineState(), f0 = gearFx(); if (M0.invT > tNow) return false; if (f0.phantom && Math.random() < .15 * Math.min(2, f0.phantom)) { floatAt(player.x, player.y - 20, 'かわした', 'info'); return false; } skGain(4); }
   const M = mineState(), dmg = Math.max(1, Math.round(atk * mul * (buffOn('def') ? .6 : 1) * (1 - armorDef() - (outfitOn('knight') ? .05 : 0)) * forgeMulA() * defMulFx() / deepMul()));
   M.hp -= dmg; hurtT = .25; floatAt(player.x, player.y - 20, '-' + dmg, 'bad'); sfx('break'); if (M.hp <= 0) { mineDie(); return true; } return false;
 }
@@ -6841,6 +6876,7 @@ function drawBoss(m) {
 function bossIcHTML(k, px) { const i = BOSS_KEYS.indexOf(k); return `<div style="width:${px}px;height:${px}px;margin:auto;background:url(${IMG.bosses.src}) -${i * px}px 0/${px * BOSS_KEYS.length}px ${px}px;image-rendering:pixelated"></div>`; }
 function bossNfx() { return 3 + (Math.random() < .35 ? 1 : 0) + (Math.random() < .1 ? 1 : 0); }
 function bossDefeated(m) {
+  if (FL.dg === 'tower') return twBossDefeated(m);
   const dg = FL.dg, G = DGD[dg], D_ = dgSt(), wk = Math.floor(gday() / 7), full = D_.wk[dg] !== wk, L = FL.curse || 0, cm = 1 + .5 * L, first = !(D_.kb[dg] > 0);
   if (L >= 3 && S.cp && S.cp.q && S.cp.q.k === 'mia') { S.cp.q.done = 1; setTimeout(() => toast('🏹 ミアの依頼を達成！ ギルド前に報告しよう', 4000), 1500); }
   if (full) D_.wk[dg] = wk; D_.kb[dg] = (D_.kb[dg] || 0) + 1; D_.kills = (D_.kills || 0) + 1; if (L) D_.clMax = Math.max(D_.clMax || 0, L);
@@ -6854,10 +6890,167 @@ function bossDefeated(m) {
     if (Math.random() < (full ? .25 : .05) * lm || (!first && D_.kb[dg] === 2)) { const g = addGear(G.ring, 4, true); lines.push(`<b style="color:${RAR_C[4]}">${gDef(g).name}</b>`); }
   }
   let learn = ''; if (dg === 'mirror' && first) setTimeout(() => popStory('<div class="tth">🪞 割れた鏡の向こうで</div><div class="ttx">もう一人の店主は、ひびの入った顔で笑った。<br>「……いい腕だ。その味、別の町角でも続けてみな。のれんは、分けるためにあるんだ」<br>鏡のかけらが光になって消えていった。</div>'), 600);
+  if (skOn() && Math.random() < .12 * accMul('luck')) { const g = twDrop(2); if (g) lines.push(`<b style="color:${RAR_C[g.r]}">${RAR_N[g.r]}・${gNm(g)}</b>（銘の武器）`); }
   if (first) { const n = learnRecipes(DG_RI[dg]); if (n) learn = `<br>${G.n}の料理帖を見つけた：${DG_RI[dg].map(i => '『' + REC[i].name + '』').join('')}`; }
   sfx('ok'); tut('dg_reward');
   popStory(`<div class="tth">👑 ${MONT[m.k].n}を倒した！${L ? `（呪い${L}）` : ''}</div><div class="ttx">${full ? '今週のごほうびを全部もらった！' : '今週のごほうびは受け取り済み（少なめ）。'}<br>${lines.join('<br>')}${learn}<br><br>上のはしごから外へ出られる。</div>`);
   dirty = true;
+}
+// ===== v0.63 武器の銘（12系列）・効果の数値の幅・技・武器の成長と覚醒・霊峰の修練の塔
+const SER = {
+  enryu:{n:'炎竜', fx:{burn:1.6, might:.5}, d:'炎（強め）・攻撃+5%', sk:'技に炎がのり、当たった敵が強く燃える'},
+  hyoga:{n:'氷牙', fx:{chill:1, guard:.6}, d:'冷気・受けるダメージ-5%', sk:'技で当たった敵が2秒こおりつく'},
+  raimei:{n:'雷鳴', fx:{thunder:1, swift:.5}, d:'雷（近くの敵1体にも40%）・攻撃の速さ+7%', sk:'技のあと、まわりの敵に落雷'},
+  tsukikage:{n:'月影', fx:{moon:1}, d:'会心+25%・会心でダメージ3倍', sk:'技がすべて会心になる'},
+  kaijin:{n:'海神', fx:{knock:1.5, guard:.6}, d:'大きく吹き飛ばす・受けるダメージ-5%', sk:'技で大波：まわりの敵を遠くへ押し返す'},
+  shukaku:{n:'収穫', fx:{butcher:1, forage:1, luck:.6}, d:'魔物の素材×1.5・採集物が見つかりやすい・落とし物+9%', sk:'技で倒した敵の素材が必ず落ちる'},
+  bishoku:{n:'美食', fx:{magic2:1, regen:.6}, d:'料理のバフ時間+60%・体力がゆっくり回復', sk:'技を出すと体力が15%回復'},
+  naraku:{n:'奈落', fx:{drain:1.6, might:1}, d:'吸血8%・攻撃+10%', sk:'技で与えたダメージの20%を吸う'},
+  dokuja:{n:'毒蛇', fx:{poison:2}, d:'毒（強め）', sk:'技で当たった敵に猛毒'},
+  seiko:{n:'聖光', fx:{regen:2, guard:.6}, d:'体力がよく回復・受けるダメージ-5%', sk:'技を出すと体力10%回復＋1.5秒ダメージを受けない'},
+  genei:{n:'幻影', fx:{phantom:1, swift:1}, d:'15%で攻撃をかわす・攻撃の速さ+15%', sk:'分身がもう一度、半分の強さで技を出す'},
+  ouke:{n:'王家', fx:{gold:1, luck:1.5}, d:'倒すとお金・落とし物+22%', sk:'技で倒すと金貨がたくさん落ちる'},
+};
+for (const k in SER) WFX['s_' + k] = SER[k].n + '：' + SER[k].d;
+WFX.thunder = '雷：近くの敵1体にも雷（ダメージの40%）'; WFX.phantom = '幻影：15%で攻撃をかわす';
+const SER_KEYS = Object.keys(SER);
+const serOf = d => d && d.fx && d.fx.startsWith('s_') ? d.fx.slice(2) : null;
+const SKILLS = {sword:{n:'回転斬り', d:'まわりの敵すべてに攻撃の3倍'}, dagger:{n:'連撃', d:'目の前の敵に6回切りつける'}, spear:{n:'突進突き', d:'敵へ突進して4倍、通り道の敵にも2倍'},
+  hammer:{n:'大地割り', d:'まわりに3.5倍＋1.5秒ひるませる'}, bow:{n:'矢の雨', d:'ねらった敵のまわりすべてに2.2倍'}, staff:{n:'魔法陣', d:'3秒間、まわりの敵に何度も1.2倍'},
+  knife:{n:'解体', d:'1体に6倍。倒すと素材が2倍'}, scythe:{n:'大旋風', d:'広くまわりに2.5倍、与えた分の10%を吸う'}, whip:{n:'縛り打ち', d:'近くの敵5体に2倍＋3秒動きを止める'}};
+const skOn = () => unl('shugyo');
+// 効果の数値の幅（0.6〜1.4倍。深い所・強い相手ほど上振れ）
+const fxRoll = (b = 0) => Math.round((.6 + .8 * Math.pow(Math.random(), 1 / (1 + Math.max(0, b)))) * 100) / 100;
+const fxQ = q => q == null ? '' : `<span style="color:${q >= 1.25 ? '#ffc850' : q >= 1 ? '#8ad86a' : '#c8b8a0'}">【${Math.round(q * 100)}%】</span>`;
+// 武器の成長：Lv1〜20（攻撃+2%ずつ）→ 覚醒（×1.2、技×1.5、付与の枠+1）→ 覚醒Lv（上限なし、+1%ずつ）
+const wNeed = g => g.aw ? 300 + 20 * (g.alv || 0) : 20 + 10 * (g.lv || 1);
+const wGrowMul = g => (1 + .02 * (((g && g.lv) || 1) - 1)) * (g && g.aw ? 1.2 * (1 + .01 * (g.alv || 0)) : 1);
+const canAwaken = d => d && (/^(series|legend|boss)/.test(d.src));
+const gNm = g => { const d = gDef(g); return g.aw ? (d.name2 || '真・' + d.name) : d.name; };
+const gIc = g => { const d = gDef(g); return g.aw && d.icon2 ? d.icon2 : d.icon; };
+function wGain(m) {
+  if (!skOn()) return; const g = eqW(); if (!g) return; const xp = m.boss ? 40 : 1 + Math.floor(((FL && FL.eqf) || 1) / 25);
+  if (!g.aw && (g.lv || 1) >= 20) { g.xp = wNeed(g); return; }
+  g.xp = (g.xp || 0) + xp; let up = 0;
+  while (g.xp >= wNeed(g) && (g.aw || (g.lv || 1) < 20)) { g.xp -= wNeed(g); if (g.aw) g.alv = (g.alv || 0) + 1; else g.lv = (g.lv || 1) + 1; up = 1; }
+  if (up) { sfx('ok'); floatAt(player.x, player.y - 30, g.aw ? `真・覚醒Lv${g.alv}` : `武器Lv${g.lv}`, 'info'); if (!g.aw && g.lv >= 20 && canAwaken(gDef(g))) toast(`✨ ${gNm(g)}がLv20になった！ 鍛冶屋の工房で<b>覚醒</b>できる`, 4000); tut('m_wgrow'); }
+}
+// ---- 技（ゲージ）
+let SKFX = [];
+function skGain(n) { if (!skOn() || !eqW()) return; const M = mineState(), was = (M.sk || 0) >= 100; M.sk = Math.min(100, (M.sk || 0) + n); if (!was && M.sk >= 100) { tut('m_skill'); sfx('tick'); } }
+function useSkill() {
+  const M = mineState(), g = eqW(); if (!FL || !g || (M.sk || 0) < 100 || !skOn()) return; const d = WEAPI[g.id], st = wStats(), f = gearFx(), ser = serOf(d), pw = g.aw ? 1.5 : 1;
+  M.sk = 0; S.stat.skill = (S.stat.skill || 0) + 1;
+  const base = st.base * st.m * (st.rm || 1) * forgeMulS() * atkMulFx(f) * wmMul() * deepMul() * pw * (buffOn('atk') ? 1.5 : 1);
+  const dist = o => Math.hypot(o.x - player.x, o.y - player.y), near = r => FL.mons.filter(o => dist(o) < r);
+  let tgt = player.target && FL.mons.includes(player.target) ? player.target : near(80).sort((a, b) => dist(a) - dist(b))[0];
+  const H = [], add2 = (m, k) => { if (m) H.push([m, k]); };
+  const T = d.type; let stun = 0;
+  if (T === 'sword') near(30).forEach(o => add2(o, 3));
+  else if (T === 'dagger') { if (tgt) for (let i = 0; i < 6; i++) add2(tgt, 1); }
+  else if (T === 'spear') { if (tgt) { const a = Math.atan2(tgt.y - player.y, tgt.x - player.x), dd = Math.max(0, dist(tgt) - 12), nx = player.x + Math.cos(a) * dd, ny = player.y + Math.sin(a) * dd;
+      FL.mons.filter(o => o !== tgt && Math.abs((o.x - player.x) * Math.sin(a) - (o.y - player.y) * Math.cos(a)) < 10 && dist(o) < dd + 10).forEach(o => add2(o, 2));
+      if (walkable('mine', nx | 0, ny | 0)) { player.x = nx; player.y = ny; player.path = []; } add2(tgt, 4); } }
+  else if (T === 'hammer') { near(34).forEach(o => add2(o, 3.5)); stun = 1.5; }
+  else if (T === 'bow') { if (tgt) FL.mons.filter(o => Math.hypot(o.x - tgt.x, o.y - tgt.y) < 30).forEach(o => add2(o, 2.2)); }
+  else if (T === 'staff') { const c = {x:player.x, y:player.y}; for (let k = 0; k < 6; k++) setTimeout(() => { if (!FL) return; FL.mons.filter(o => Math.hypot(o.x - c.x, o.y - c.y) < 38).forEach(o => skHit(o, base * 1.2 * monDmgMul(o.k), st, f, ser)); SKFX.push({x:c.x, y:c.y, r:38, t:.3, c:'#b08aff'}); }, k * 500); }
+  else if (T === 'knife') { if (tgt) { tgt._buc = 2; add2(tgt, 6); } }
+  else if (T === 'scythe') { near(40).forEach(o => add2(o, 2.5)); }
+  else if (T === 'whip') { near(44).sort((a, b) => dist(a) - dist(b)).slice(0, 5).forEach(o => add2(o, 2)); stun = 3; }
+  if (ser === 'hyoga') stun = Math.max(stun, 2);
+  let dealt = 0;
+  for (const [m, k] of H) { if (!FL.mons.includes(m)) continue; if (stun && !m.boss) m.kb = Math.max(m.kb || 0, stun); if (stun && m.boss) m.slow = Math.max(m.slow || 0, stun); dealt += skHit(m, base * k * monDmgMul(m.k), st, f, ser); }
+  if (T === 'scythe') M.hp = Math.min(M.hpMax, M.hp + dealt * .1);
+  if (ser === 'naraku') M.hp = Math.min(M.hpMax, M.hp + dealt * .2);
+  if (ser === 'bishoku') M.hp = Math.min(M.hpMax, M.hp + M.hpMax * .15);
+  if (ser === 'seiko') { M.hp = Math.min(M.hpMax, M.hp + M.hpMax * .1); M.invT = tNow + 1.5; }
+  if (ser === 'raimei') setTimeout(() => { if (FL) near(60).slice(0, 4).forEach(o => { skHit(o, base * 1.2 * monDmgMul(o.k), st, f, null); SKFX.push({x:o.x, y:o.y - 10, r:8, t:.35, c:'#fff8a0'}); }); }, 300);
+  if (ser === 'kaijin') near(50).forEach(o => { if (o.boss) return; const a = Math.atan2(o.y - player.y, o.x - player.x), nx = o.x + Math.cos(a) * 30, ny = o.y + Math.sin(a) * 20; if (walkable('mine', nx | 0, ny | 0)) { o.x = nx; o.y = ny; } o.kb = 1; });
+  if (ser === 'genei') setTimeout(() => { if (!FL) return; for (const [m, k] of H) if (FL.mons.includes(m)) skHit(m, base * k * .5 * monDmgMul(m.k), st, f, null); SKFX.push({x:player.x + 8, y:player.y - 8, r:20, t:.4, c:'#e8d8ff'}); }, 400);
+  SKFX.push({x:player.x, y:player.y, r:T === 'bow' || T === 'staff' ? 38 : 32, t:.45, c:{enryu:'#ff9a40', hyoga:'#a8e0ff', raimei:'#fff070', tsukikage:'#c8d8ff', kaijin:'#60e0f0', naraku:'#c080ff', dokuja:'#a8ff80', seiko:'#fff8d0', ouke:'#ffd860'}[ser] || '#ffe8c0'});
+  wSwingT = .3; sfx('fanfare'); floatAt(player.x, player.y - 26, '技：' + SKILLS[T].n + (g.aw ? '・真' : ''), 'info'); dirty = true;
+}
+function skHit(m, dmg, st, f, ser) {
+  if (!FL || !FL.mons.includes(m)) return 0; const crit = ser === 'tsukikage' || Math.random() < .2; if (crit) dmg *= f.moon ? 3 : 2;
+  if (ser === 'enryu') { m.burn = 4; m.bdps = dmg * .3; } if (ser === 'dokuja') { m.pois = 5; m.pdps = dmg * .25; }
+  if (ser === 'shukaku') m._buc = Math.max(m._buc || 0, 1.01);
+  if (ser === 'ouke') m._gold = 1;
+  const hp0 = m.hp; hitMon(m, dmg, st, f, crit, true); return Math.max(0, hp0 - Math.max(0, m.hp));
+}
+// ---- 修練の塔（霊峰）
+const TW_N = '霊峰の修練の塔';
+function twSt() { if (!S.tw) S.tw = {best:0, mk:0, clr:{}, kills:0}; return S.tw; }
+const twBand = f => f <= 10 ? 0 : f <= 20 ? 1 : 2;
+function twUnl() { if (!unl('shugyo') && unl('abyss') && (mineState().max || 0) >= 60) unlockFeature('shugyo'); }
+Object.assign(MONT, {
+  tw_imp:{n:'小鬼', hp:90, atk:28, spd:32, drop:[['sansai', .15]]}, tw_shield:{n:'盾持ちの石兵', hp:230, atk:34, spd:16, shield:1, drop:[['walnut', .3]]},
+  tw_armor:{n:'鎧武者', hp:260, atk:40, spd:18, armor:.6, drop:[['matsutake', .2]]}, tw_monk:{n:'修行僧の亡霊', hp:150, atk:38, spd:30, drop:[['sansai', .3]]},
+  tw_hawk:{n:'山の鷹', hp:110, atk:34, spd:42, fly:1, drop:[['walnut', .2]]},
+  tw_golem:{n:'石の門番ゴーレム', hp:9000, atk:46, spd:12, boss:1, armor:.35, drop:[]}, tw_shogun:{n:'鎧の大将', hp:16000, atk:56, spd:16, boss:1, armor:.4, drop:[]},
+  tw_tengu:{n:'天狗の大師範', hp:26000, atk:64, spd:22, boss:1, armor:.3, drop:[]},
+});
+Object.assign(BOSSP, {
+  tw_golem:{pat:['ring', 'cross', 'erupt'], minion:'tw_imp', say:'石の門が動いた。「修行の者よ、その技を見せよ」　※鎧（青いゲージ）は技でしか割れない'},
+  tw_shogun:{pat:['dash', 'cross', 'tent'], minion:'tw_armor', say:'鎧の大将が大太刀を抜いた。「技なき刃は、この鎧に通らぬ」'},
+  tw_tengu:{pat:['foxfire', 'dash', 'breath', 'hail'], minion:'tw_hawk', say:'天狗の大師範が羽うちわをひと振り。嵐が巻き起こる！「よくぞ登った。最後の稽古をつけてやろう」'},
+});
+BOSS_KEYS.push(...(D.twboss || ['tw_golem', 'tw_shogun', 'tw_tengu']));
+DGD.tower = {n:TW_N, town:null, ic:'🗼', boss:'tw_tengu', mons:['tw_imp', 'tw_shield', 'tw_armor', 'tw_monk', 'tw_hawk'], mats:['matsutake', 'sansai', 'walnut'], bm:'matsutake', eqf:80, gold:300000, gp:150, fl:30,
+  d:'雲の上にそびえる石の塔。武人たちが技をみがいてきた修行の場。10階ごとに「階の主」が待つ。', rocks:{stone:50, diamond:10, moonstone:15, yasho:15, hoshikui:10}, blk:[]};
+// 塔の強さは、あなたの深層の記録の85%の深さの魔物に合わせる（いつ登っても手ごたえがある）
+const twScale = () => deepSc(Math.max(60, Math.floor(((S.mine && S.mine.max) || 60) * .85))) / deepSc(60);
+function genTwFloor(fl, f) {
+  const G = DGD.tower, sc = twScale() * (1 + .05 * (f - 1)), cl = fl.curse || 0;
+  if (f === 10 || f === 20 || f > 30) { fl.boss = true; fl.twb = 1; const k = f === 10 ? 'tw_golem' : f === 20 ? 'tw_shogun' : 'tw_tengu', b = mkMon(k, 72, 150, twScale(), 0); b.boss = 1; b.arm = b.armMax = Math.round(b.max * MONT[k].armor * .6); fl.mons.push(b); return; }
+  fl.special = 'nest'; const kind = pick(['swarm', 'armor', 'shield', 'mix']), list = kind === 'swarm' ? [...Array(7).fill('tw_imp'), 'tw_monk'] : kind === 'armor' ? ['tw_armor', 'tw_armor', 'tw_imp', 'tw_imp', 'tw_monk'] : kind === 'shield' ? ['tw_shield', 'tw_shield', 'tw_shield', 'tw_hawk'] : ['tw_shield', 'tw_armor', 'tw_monk', 'tw_hawk', 'tw_imp'];
+  for (const k of list) { const p = randWalk(fl), m = mkMon(k, p[0], p[1], sc, 0); if (MONT[k].armor) m.arm = m.armMax = Math.round(m.max * MONT[k].armor); fl.mons.push(m); }
+  fl.twk = kind; if (Math.random() < .14) { fl.chest = {x:64, y:132, open:false}; fl.special = 'nest'; }
+}
+function twFloorClear() { const T = twSt(), f = FL.f, first = !T.clr[f]; T.clr[f] = 1; T.mk += first ? 3 : 1; T.best = Math.max(T.best, f); return first ? 3 : 1; }
+function twDrop(minR = 2, ser) {   // 銘の武器を1本（レア度は希少以上、数値は塔の高さで上振れ）
+  const s = ser || pick(SER_KEYS), t = pick(Object.keys(WT_N)), w = WEAPI[`sr_${s}_${t}`]; if (!w) return null;
+  const x = Math.random() / accMul('luck'), r = Math.max(minR, x < .08 ? 4 : x < .35 ? 3 : 2), g = addGear(w.id, r, true); g.q0 = fxRoll(FL ? (FL.f || 0) / 15 : 0); return g;
+}
+function twBossDefeated(m) {
+  const T = twSt(), f = FL.f, first = !T.clr[f]; T.clr[f] = 1; T.best = Math.max(T.best, f); const mk = f > 30 ? 20 : 10; T.mk += mk; T.kills++;
+  FL.mons = []; const lines = [`修練の証 +${mk}`]; const gold = f > 30 ? 120000 : f === 20 ? 60000 : 30000; S.gold += gold; lines.push(`賞金 +${fmt(gold)}G`);
+  const g = twDrop(first ? 3 : 2); if (g) lines.push(`<b style="color:${RAR_C[g.r]}">${RAR_N[g.r]}・${gNm(g)}</b>（${WFX[gDef(g).fx].split('：')[0]}の銘 ${fxQ(g.q0)}）`);
+  if (f > 30) { const D_ = dgSt(), wk = Math.floor(gday() / 7); D_.kb.tower = (D_.kb.tower || 0) + 1; if (first) S.stat.twTop = 1; }
+  else { const p = [64, 120]; FL.ladder = {x:p[0], y:p[1]}; buildMineWalk(); }
+  sfx('fanfare'); tut('m_tower');
+  popStory(`<div class="tth">👑 ${MONT[m.k].n}を倒した！</div><div class="ttx">${lines.join('<br>')}<br><br>${f > 30 ? '塔の頂を極めた！ 上のはしごから外へ出られる。' : '階段が現れた。上の階へ進める。'}</div>`); dirty = true;
+}
+function openTowerEntry() {
+  if (!unl('shugyo')) return toast('🔒 奈落の深層のB60にたどり着くと、霊峰の修練の塔へ行けるようになる。'); tut('m_tower');
+  const T = twSt(), D_ = dgSt(), cl = unl('curse') ? (D_.cl || 0) : 0, starts = [[1, '1階から登る']];
+  if (T.best >= 11) starts.push([11, '11階から登る（中層）']); if (T.best >= 21) starts.push([21, '21階から登る（上層）']); if (T.best >= 31) starts.push([31, '頂（天狗の大師範）へ直行']);
+  modal(TW_N, `<img src="${IMG.dg_gate_tower.src}" style="width:100%;image-rendering:pixelated;border-radius:4px">
+    <div class="p">${DGD.tower.d}<br>全30階＋頂。<b>技</b>が試される：<b>鎧</b>（青いゲージ）を着た敵は、技でしか鎧を割れない（ふつうの攻撃はほとんど効かない）／<b>盾持ち</b>はふつうの攻撃を7割防ぐ／<b>小鬼の大群れ</b>は技でまとめて倒そう。<br>どの階も、敵を全部倒すと階段が出る。</div>
+    <div class="p">これまでの最高 ${T.best ? (T.best > 30 ? '頂' : T.best + '階') : 'まだ登っていない'}　修練の証 <b>${T.mk}</b>（覚醒と、銘の武器の交換に使う）</div>
+    <div class="p">技：攻撃を当てるとゲージがたまり、満タンで画面上の「⚔技」を押す。今の武器の技：<b>${eqW() ? SKILLS[gDef(eqW()).type].n + '（' + SKILLS[gDef(eqW()).type].d + '）' : '（武器を装備しよう）'}</b></div>
+    <div class="btn" data-a="ex" style="margin:${U}px 0">🎖 修練の証で銘の武器と交換する</div>
+    ${curseUI(cl)}${starts.map(([f, lb]) => `<div class="btn big ${f === 31 ? 'red' : f > 1 ? 'blu' : ''}" data-tf="${f}" style="margin-top:${U}px">${lb}</div>`).join('')}`, 'tower');
+  bind('[data-a=ex]', () => openTwShop());
+  bind('[data-cl]', d => { D_.cl = +d.cl; tut('curse'); openTowerEntry(); });
+  bind('[data-tf]', d => { if (!payCurse()) return; D_.ret = 'well'; enterDg('tower', +d.tf); });
+}
+let twShopS = 'enryu';
+function openTwShop() {
+  const T = twSt(), cost = 30;
+  modal('修練の証の交換', `<div class="p">修練の証 <b>${T.mk}</b>。好きな銘・好きな種類の武器（希少）を、証${cost}で打ってもらえる。数値の幅はふつう〜上振れ。</div>
+    <div class="seg many">${SER_KEYS.map(k => `<div class="${twShopS === k ? 'on' : ''}" data-ss="${k}">${SER[k].n}</div>`).join('')}</div>
+    <div class="p"><b>${SER[twShopS].n}の銘</b>：${SER[twShopS].d}<br>技の追加効果：${SER[twShopS].sk}</div>` +
+    Object.keys(WT_N).map(t => { const w = WEAPI[`sr_${twShopS}_${t}`]; if (!w) return ''; return `<div class="row">${icHTML(w.icon, U * 10, 'atlas')}<div class="t"><b>${w.name}</b><span>${WT_N[t]}／${WSUB[w.sub].n}　技：${SKILLS[t].n}</span></div><div class="btn ${T.mk >= cost ? 'grn' : 'dis'}" data-tb="${w.id}">証${cost}</div></div>`; }).join(''), 'twshop');
+  bind('[data-ss]', d => { twShopS = d.ss; openTwShop(); });
+  bind('[data-tb]', d => { if (T.mk < cost) return; T.mk -= cost; const g = addGear(d.tb, 2, false); g.q0 = fxRoll(.6); sfx('ok'); dirty = true; openTwShop(); });
+}
+function drawSkillLayer() {   // 技の光と、鎧のゲージ・技のゲージ
+  const out = []; SKFX = SKFX.filter(e => (e.t -= 1 / 60) > 0);
+  for (const e of SKFX) { ctx.strokeStyle = e.c; ctx.globalAlpha = Math.min(1, e.t * 3); ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(e.x, e.y, e.r * (1.2 - e.t), e.r * .75 * (1.2 - e.t), 0, 0, 7); ctx.stroke(); ctx.globalAlpha = 1; ctx.lineWidth = 1; }
+  if (FL) for (const m of FL.mons) if (m.arm > 0 && !m.boss) { ctx.fillStyle = '#140c08'; ctx.fillRect(m.x - 7, m.y - 20, 14, 2); ctx.fillStyle = '#5ab0ff'; ctx.fillRect(m.x - 7, m.y - 20, Math.max(1, 14 * m.arm / m.armMax), 2); }
+  const B = FL && FL.mons.find(x => x.boss && x.arm > 0); if (B) out.push({y:9999, f:() => { const x = Math.round(Math.max(12, Math.min(82, B.x - 25))), y = Math.round(B.y - 44); ctx.fillStyle = '#140c08'; ctx.fillRect(x - 1, y - 1, 52, 3); ctx.fillStyle = '#5ab0ff'; ctx.fillRect(x, y, Math.max(1, 50 * B.arm / B.armMax), 1); }});
+  if (skOn() && eqW()) { const M = mineState(), v = (M.sk || 0) / 100; ctx.fillStyle = '#140c08'; ctx.fillRect(player.x - 8, player.y + 3, 16, 2); ctx.fillStyle = v >= 1 ? (Math.sin(tNow * 10) > 0 ? '#ffe070' : '#ff9a40') : '#c8a050'; ctx.fillRect(player.x - 8, player.y + 3, Math.round(16 * v), 2); }
+  return out;
 }
 // ===== v0.40: 魔物牧場・使い魔・薬草と調合
 const POTD = {}; (D.pot || []).forEach(([id, rc, d]) => POTD[id] = {rc, d});
@@ -6895,7 +7088,7 @@ function mrTame(m) {
   const R = mrSt(); R.tp = (R.tp || 0) + p;   // v0.62 天井：確率の合計が0.3（ふつう約60体）でなつかなければ、次は必ず
   if (Math.random() < p || R.tp >= .3) { R.tp = 0; mrAdd(m.k, Math.random() < .02, `倒れた${MONT[m.k].n}が、起き上がってこちらを見つめている……なついたようだ。`); }
 }
-function eggKind(fl) { return fl.dg ? (fl.dg === 'mirror' ? 'dark' : fl.dg) : fl.v ? 'dark' : ['cave', 'crystal', 'fire', 'ice', 'dark', 'dark'][layerOf(fl.f)]; }
+function eggKind(fl) { return fl.dg ? (fl.dg === 'mirror' || fl.dg === 'tower' ? 'dark' : fl.dg) : fl.v ? 'dark' : ['cave', 'crystal', 'fire', 'ice', 'dark', 'dark'][layerOf(fl.f)]; }
 function mrEggDrop(fl, p) { if (!unl('mranch') || !fl || Math.random() > p) return; const id = ING.find(g => g.src[0] === 'mregg' && g.src[1] === eggKind(fl)).id; giveBag('i', id, false, 1); tripAdd(id, 1); S.known.i[id] = true; toast(`🥚 ${ingName(id)}を拾った！ 魔物牧場の孵化小屋で孵せる`, 3000); }
 function mrDaily() {
   const R = mrSt(), d = gday(); if (R.day === d) return; const days = Math.min(3, d - R.day); R.day = d;
@@ -8040,7 +8233,7 @@ function mineUpdate(dt) {
     if (d < (FL.f <= 5 ? 45 : 70) * (buffOn('p_stealth') ? .5 : 1)) {
       if (d > 8) { const sp = t.spd * dt * (m.slow > 0 ? .5 : 1), nx = m.x + (player.x - m.x) / d * sp, ny = m.y + (player.y - m.y) / d * sp;
         if (t.fly || walkable('mine', nx | 0, ny | 0)) { m.x = nx; m.y = ny; } else if (walkable('mine', nx | 0, m.y | 0)) m.x = nx; else if (walkable('mine', m.x | 0, ny | 0)) m.y = ny; m.flip = player.x < m.x; }
-      else if (m.cd <= 0) { m.cd = 1.1; const dmg = Math.max(1, Math.round(m.atk * (buffOn('def') ? .6 : 1) * (1 - armorDef() - (outfitOn('knight') ? .05 : 0)) * forgeMulA() * defMulFx() / deepMul())); M.hp -= dmg; hurtT = .25; floatAt(player.x, player.y - 20, '-' + dmg, 'bad'); sfx('break'); if (M.hp <= 0) return mineDie(); }
+      else if (m.cd <= 0) { m.cd = 1.1; { const f0 = gearFx(); if (M.invT > tNow || (f0.phantom && Math.random() < .15 * Math.min(2, f0.phantom))) { floatAt(player.x, player.y - 20, 'かわした', 'info'); continue; } skGain(4); } const dmg = Math.max(1, Math.round(m.atk * (buffOn('def') ? .6 : 1) * (1 - armorDef() - (outfitOn('knight') ? .05 : 0)) * forgeMulA() * defMulFx() / deepMul())); M.hp -= dmg; hurtT = .25; floatAt(player.x, player.y - 20, '-' + dmg, 'bad'); sfx('break'); if (M.hp <= 0) return mineDie(); }
     } else { m.wait -= dt; if (m.wait <= 0) { m.wait = rnd(1.5, 4); const p = randWalk(FL); m.path = [p]; } if (m.path.length) { const p = m.path[0], dd = Math.hypot(p[0] - m.x, p[1] - m.y); if (dd < 2) m.path.shift(); else { const nx = m.x + (p[0] - m.x) / dd * t.spd * .5 * dt, ny = m.y + (p[1] - m.y) / dd * t.spd * .5 * dt; if (t.fly || walkable('mine', nx | 0, ny | 0)) { m.x = nx; m.y = ny; } else m.path = []; } } }
   }
 }
@@ -8060,13 +8253,17 @@ function killMon(m, sw) {
   if (player.resume && FL.rocks.includes(player.resume)) { player.mining = player.resume; } player.resume = null;
   wmXp(m.boss ? 15 : 1);
   if (FL.arena) { plXp(m.boss ? 30 : 2 + Math.floor((FL.eqf || 1) / 8)); return; }
-  monPartDrop(m); gearOnKill(m);
+  monPartDrop(m); if (m._buc > 1 && MPART[m.k] && unl('monster')) { const n = m._buc >= 2 ? 2 : 1; giveBag('i', MPART[m.k][0], false, n); tripAdd(MPART[m.k][0], n); floatAt(m.x, m.y - 22, ingName(MPART[m.k][0]) + ' +' + n, 'info'); }
+  if (m._gold) { const g = Math.round(200 + (FL.eqf || FL.f || 1) * 20); S.gold += g; floatAt(m.x, m.y - 30, `+${g}G`, 'info'); }
+  gearOnKill(m); wGain(m);
+  if (FL.dg === 'tower' && !m.boss && Math.random() < .006 * accMul('luck')) { const g = twDrop(2); if (g) toast(`⚔ ${MONT[m.k].n}が<b style="color:${RAR_C[g.r]}">${gNm(g)}</b>を落とした！`, 3500); }
+  if (FL.v && skOn() && Math.random() < .0008 * accMul('luck')) { const g = twDrop(2); if (g) toast(`⚔ 深層の魔物が<b style="color:${RAR_C[g.r]}">${gNm(g)}</b>を落とした！`, 3500); }
   if (m.boss && FL.dg) bossDefeated(m);
   if (m.trial && S.cp && S.cp.q && S.cp.q.k === 'grant') { S.cp.q.done = 1; toast('⚔ 試練の魔物を倒した！ ギルド前のグラントに報告しよう', 4000); }
   plXp(m.boss ? 60 : 2 + Math.floor(((FL.eqf || FL.f) || 1) / 8)); mrTame(m); mrEggDrop(FL, m.boss ? .5 : .004); tmDrop(.005, '魔物が落とした'); famXp(m.boss ? 30 : 1 + Math.floor(((FL.eqf || FL.f) || 1) / 12));
   for (const [id, p] of MONT[m.k].drop) if (Math.random() < p * monDropMul(m.k) * curseDrop() * accMul('luck') * (1 + .2 * (gearFx().luck || 0))) { giveBag('i', id, false, 1); tripAdd(id, 1); floatAt(m.x, m.y - 10, ingName(id) + ' +1', 'info'); }
   if (FL.v) { deepKill(m); legRoll(.002, 'naraku_kinoko', '奈落の深層の魔物が落とした。'); }
-  if (FL.special === 'nest' && !FL.mons.length && !FL.ladder) { const p = randWalk(FL); FL.ladder = {x:p[0] - 8, y:p[1] - 8}; toast('魔物を全滅させた！ 階段が現れた。'); }
+  if (FL.special === 'nest' && !FL.mons.length && !FL.ladder) { const p = randWalk(FL); FL.ladder = {x:p[0] - 8, y:p[1] - 8}; if (FL.dg === 'tower') { const n = twFloorClear(); toast(`🗼 ${FL.f}階を制した！ 修練の証 +${n}。階段が現れた。`); } else toast('魔物を全滅させた！ 階段が現れた。'); }
 }
 // v0.51：来たはしごで上の階へ戻る（戻った階は岩も魔物もそのまま）
 function linkAbove(a) { if (!FL || !a) return; FL.above = a; let n = 0, x = FL; while (x.above) { if (++n >= 25) { x.above = null; break; } x = x.above; } }
@@ -8128,7 +8325,8 @@ function openMineEntry() {
     <div class="p">ツルハシ：${pk ? TOOLI[pk.id].name : '<span style="color:#d8806a">なし（市場の道具で買える）</span>'}　武器：${eqW() ? gDef(eqW()).name : 'なし（鍛冶屋で作る／装備画面で選ぶ）'}　防具：${ARMOR_N[S.armor || 0]}（鍛冶屋で作れる）　最大体力：${M.hpMax}<br>最深到達：${M.max ? 'B' + M.max : 'まだ入っていない'}</div>
     <div class="p">体力と気力は、持っていった<b>料理を食べると回復</b>する（迷宮の中の「食べる」ボタン）。倒れるとその回に拾った物の半分を失う。</div></div>` +
     (M.mark > 1 ? `<div class="btn big grn" data-mk="${M.mark}" style="margin-bottom:${U * 1.2}px">📜 帰還の印：B${M.mark}から再開（1回だけ）</div>` : '') + cps.map(f => `<div class="btn big ${f === 1 ? '' : 'blu'}" data-f="${f}" style="margin-bottom:${U * 1.2}px">${f === 1 ? '入口（B1）から入る' : `昇降機でB${f}（${LAYERS[layerOf(f)].n}）へ`}</div>`).join('');
-  const i_ = html.indexOf('</div></div>') + 12; modal('地下迷宮', html.slice(0, i_) + curseUI(unl('curse') ? (dgSt().cl || 0) : 0) + html.slice(i_), 'mineentry');
+  const i_ = html.indexOf('</div></div>') + 12; modal('地下迷宮', html.slice(0, i_) + curseUI(unl('curse') ? (dgSt().cl || 0) : 0) + html.slice(i_) + (unl('shugyo') ? `<div class="btn big red" data-a="tw" style="margin-top:${U}px">🗼 ${TW_N}へ（井戸の奥の転移の石から）</div>` : ''), 'mineentry');
+  bind('[data-a=tw]', () => openTowerEntry());
   bind('[data-f]', d => enterMine(+d.f));
   bind('[data-mk]', () => { const f = M.mark; M.mark = 0; enterMine(f); });
   bind('[data-cl]', d => { dgSt().cl = +d.cl; tut('curse'); openMineEntry(); });
@@ -8172,7 +8370,7 @@ function drawMine() {
   for (const o of FL.rocks) list.push({y:o.y + 12, f:() => { const i = ROCKS.indexOf(o.k); ctx.drawImage(IMG['rocks_' + (FL.dg || (FL.v ? 'deep' : 'l' + layerOf(FL.f)))] || IMG.rocks, i * 16, 0, 16, 13, o.x, o.y, 16, 13);
     if (o.hp < o.max) { ctx.fillStyle = '#140c08'; ctx.fillRect(o.x + 2, o.y - 3, 12, 2); ctx.fillStyle = '#e8b858'; ctx.fillRect(o.x + 2, o.y - 3, Math.max(1, Math.round(12 * o.hp / o.max)), 2); }
     if (player.mining === o && Math.random() < .4) { ctx.fillStyle = '#fff3c0'; ctx.fillRect(o.x + 4 + Math.random() * 8 | 0, o.y + Math.random() * 6 | 0, 1, 1); } }});
-  list.push(...drawBossLayer());
+  list.push(...drawBossLayer()); if (FL) list.push(...drawSkillLayer());
   if (FL.crack) list.push({y:FL.crack.y + 12, f:() => ctx.drawImage(IMG.crackwall, FL.crack.x, FL.crack.y)});
   if (FL.door) list.push({y:68, f:() => ctx.drawImage(IMG.sealdoor, stSt().open ? 32 : 0, 0, 32, 30, 14, 40, 32, 30)});
   if (FL.vault && FL.chest) list.push({y:132, f:() => ctx.drawImage(IMG.bigchest, 60, 110)});
@@ -8385,7 +8583,7 @@ async function boot() {
   bootMark('はじめ');
   if (bootPrev && !bootPrev.done && Date.now() - bootPrev.t < 600000) BOOTERR.push('前回の起動が「' + bootPrev.st + '」で止まった');
   layout();
-  const ks = ['atlas','world','sil','gold','chars','charsUI','bg_interior','bg_outside','bg_farm','bg_farm2','logo','machines','workshop','rocks','bg_farm3','bg_farm4','bg_mine0','bg_mine1','bg_mine2','bg_mine3','bg_mine4','bg_mine5','bg_fpond','bg_fpier','bg_flake','tackle','bg_upstairs','stairs','bg_wilds','bg_stall','wagon','decor','bed','bg_b_river','bg_b_flower','bg_b_marsh','bg_b_volcano','bg_b_snow','bg_b_moon','bmap','gimmick','dog','rival','bg_cellar','cellarobj','trapdoor','bg_deep_deep','bg_deep_mist','bg_deep_dark','bg_deep_vein','bg_deep_den','bg_deep_garden','tower_a0','tower_a1','tower_a2','tower_a3','tower_a4','tower_ext','tower_far','tower_off','bg_port','exp_map','exp_map2','bg_desert','exp_map3','exp_map4','exp_map5','bg_tea','bg_capital','bg_isle','bg_guild1','bg_guild2','bg_guild3','bg_guild4','bg_guild5','guild_sign','cara_banner','wagons','cmark','bosses','curse_statue','bg_mranch','guild_sign2','bg_museum','bg_oldtown','bld_chapel','bld_library','bld_school','bld_theater','bld_bathhouse','bld_garden','bld_smithy','bld_gate','bg_mirror','place','bg_mfarm','bg_dg_mirror','bg_dgb_mirror','dg_gate_mirror','mgate','cportraits','steles','sealdoor','digspot','bigchest','crackwall','bg_vault','bg_ancient','moonstall','forge','stall_spr','bg_tavern','bg_arena','tv_boards','bg_hill','hill_ov2','hill_ov3',...['l0','l1','l2','l3','l4','l5','deep','ship','temple','shrine','castle','volcano'].map(t => 'rocks_' + t),...['ship','temple','shrine','castle','volcano'].flatMap(k => ['bg_dg_' + k, 'bg_dgb_' + k, 'dg_gate_' + k])];
+  const ks = ['atlas','world','sil','gold','chars','charsUI','bg_interior','bg_outside','bg_farm','bg_farm2','logo','machines','workshop','rocks','bg_farm3','bg_farm4','bg_mine0','bg_mine1','bg_mine2','bg_mine3','bg_mine4','bg_mine5','bg_fpond','bg_fpier','bg_flake','tackle','bg_upstairs','stairs','bg_wilds','bg_stall','wagon','decor','bed','bg_b_river','bg_b_flower','bg_b_marsh','bg_b_volcano','bg_b_snow','bg_b_moon','bmap','gimmick','dog','rival','bg_cellar','cellarobj','trapdoor','bg_deep_deep','bg_deep_mist','bg_deep_dark','bg_deep_vein','bg_deep_den','bg_deep_garden','tower_a0','tower_a1','tower_a2','tower_a3','tower_a4','tower_ext','tower_far','tower_off','bg_port','exp_map','exp_map2','bg_desert','exp_map3','exp_map4','exp_map5','bg_tea','bg_capital','bg_isle','bg_guild1','bg_guild2','bg_guild3','bg_guild4','bg_guild5','guild_sign','cara_banner','wagons','cmark','bosses','curse_statue','bg_mranch','guild_sign2','bg_museum','bg_oldtown','bld_chapel','bld_library','bld_school','bld_theater','bld_bathhouse','bld_garden','bld_smithy','bld_gate','bg_mirror','place','bg_mfarm','bg_dg_mirror','bg_dgb_mirror','dg_gate_mirror','mgate','cportraits','steles','sealdoor','digspot','bigchest','crackwall','bg_vault','bg_ancient','moonstall','forge','stall_spr','bg_tavern','bg_arena','tv_boards','bg_hill','hill_ov2','hill_ov3','bg_tw0','bg_tw1','bg_tw2','bg_twb0','bg_twb1','bg_twb2','dg_gate_tower',...['l0','l1','l2','l3','l4','l5','deep','ship','temple','shrine','castle','volcano'].map(t => 'rocks_' + t),...['ship','temple','shrine','castle','volcano'].flatMap(k => ['bg_dg_' + k, 'bg_dgb_' + k, 'dg_gate_' + k])];
   introMsg('読み込み中…（画像）'); let nl = 0; await Promise.all(ks.map(k => loadImg(k, A[k]).then(() => { if (++nl % 20 === 0) introMsg(`読み込み中…（画像 ${nl}/${ks.length}）`); })));
   bootMark('画像の準備'); introMsg('読み込み中…（画像の準備）'); await new Promise(r => setTimeout(r, 20));
   for (const k of ['atlas','sil','gold','charsUI','tackle']) URL_[k] = BLOBU[k] || ('data:image/png;base64,' + A[k]);
