@@ -112,8 +112,8 @@ const GOALS = [
   {t:'食材の相場で利益を出そう', h:'市場の「相場」タブ。安い日に買って、高い日に売る', chk:s => (s.stat.tradeWin || 0) >= 1, r:3000, un:['training']},
   {t:'従業員を修行の旅に出そう', h:'Lv10の従業員を「従業員」タブから', chk:s => (s.stat.train || 0) >= 1, r:5000, un:['rival']},
   {t:'支店をLv3にしよう', h:'「施設」タブの「となり町の支店」から', chk:s => s.branch && s.branch.lv >= 3, r:20000, un:['abyss']},
-  {t:'白昼亭との売上勝負に勝とう', h:'宵闇亭の右隣の白昼亭。日曜が終わったとき、その週（月〜日曜）の売上が多いほうが勝ち', chk:s => s.rival && s.rival.wins >= 1, r:10000},
-  {t:'白昼亭に3回勝って提携しよう', h:'白昼亭は勝つたびに強くなる。売上を伸ばそう', chk:s => s.rival && s.rival.ally, r:30000},
+  {t:'白昼亭との売上勝負に勝とう', h:'宵闇亭の右隣の白昼亭。毎週（月〜日曜）の「お題」（最初の週は売上）で、日曜が終わったときに多いほうが勝ち', chk:s => s.rival && s.rival.wins >= 1, r:10000},
+  {t:'白昼亭に3回勝って提携しよう', h:'毎週お題が変わる（魚介の料理・甘い料理・皿数など）。白昼亭をタップしてお題を見て、合う料理を棚に並べよう', chk:s => s.rival && s.rival.ally, r:30000},
   {t:'店の格を「伝説の宵闇亭」にしよう', h:'評判85以上・料理を1,500皿以上売る', chk:s => rankIdx() >= 4, r:20000, un:['fame']},
   {t:'名声をLv5にしよう', h:'画面上の店の格のところをタップすると名声が見られる。売上と評判で貯まる', chk:s => s.fame && s.fame.lv >= 5, r:30000, un:['kiwami']},
   {t:'料理を1つ「極」にしよう', h:'同じ料理を150皿作る（料理人が作った分も入る）。図鑑の「極み」タブで進み具合', chk:s => kiwaCount() >= 1, r:30000, un:['tower']},
@@ -997,7 +997,7 @@ function step(dt, vis) {
     if (buy && s.key[0] === 'c' && S.creative[s.key] && S.creative[s.key].ai) S.creative[s.key].sold = (S.creative[s.key].sold || 0) + 1;
     { const dy = dayTrack(); dy.cust++; if (buy) { dy.buy++; dy.earned += s.price; dy.dish[s.key] = (dy.dish[s.key] || 0) + 1; } }
     if (buy && isMonDish(s.key)) S.stat.monsold = (S.stat.monsold || 0) + 1;
-    if (buy) { S.gold += s.price; S.stat.sold++; S.stat.earned += s.price; s.n--; rep_.sold = (rep_.sold || 0) + 1; rep_.earned = (rep_.earned || 0) + s.price;
+    if (buy) { rivalTrack(s.key, s.price); S.gold += s.price; S.stat.sold++; S.stat.earned += s.price; s.n--; rep_.sold = (rep_.sold || 0) + 1; rep_.earned = (rep_.earned || 0) + s.price;
       if (S.staff.clerk && S.auto.sell && buy) eXp('clerk', null, .5);
       if (S.fac.upstairs && Math.random() < .12 * S.fac.upstairs + (S.staff.clerk && perkN('clerk', 'up') ? .08 : 0)) { const j = avail.find(k => k !== i && S.shelf[k].n > 0); if (j !== undefined) { const s2 = S.shelf[j]; if (s2.price <= dval(s2.key, s2.g) * 1.35 * ct.b) { S.gold += s2.price; S.stat.sold++; S.stat.earned += s2.price; s2.n--; dayTrack().extra++; dayTrack().earned += s2.price; rep_.sold++; rep_.earned += s2.price; if (vis && scene === 'interior') floatAt(72, 236, '追加注文 +' + fmt(s2.price) + 'G', 'info'); } } } }
     if (reg) regVisit(reg, s, re, vis);
@@ -2782,7 +2782,7 @@ const TUT = {
   fac_cellar:['地下貯蔵庫', '厨房の真ん中に床扉ができた。降りると熟成台が並んでいる。'],
   sc_cellar:['地下貯蔵庫', '熟成台をタップして食材を寝かせる。寝かせた物に合わせて、樽・かめ・チーズ棚・肉吊りに変わる。下の細い棒が熟成の進み具合。光ったら完成。<br>熟成品は市場の本『熟成の手帖』のレシピで使える。'],
   cellar_put:['熟成中', '熟成はゲームの時間で進む（眠っている間や放置中も）。途中で取り出すと、その時点の品質★のまま戻る。完成すると知らせが出る。'],
-  rival:['白昼亭との売上勝負', '毎週（月〜日曜）、宵闇亭と白昼亭の<b>売上</b>を比べる。日曜が終わったときに結果発表。<br>白昼亭をタップすると、今週の売上の比べと残り日数が見られる。<br>勝つと<b>賞金と評判</b>。負けても失う物はない。<b>3回勝つと提携</b>して、毎朝 分け前と珍しい食材が届く。'],
+  rival:['白昼亭との売上勝負', '毎週（月〜日曜）、宵闇亭と白昼亭で<b>お題</b>の勝負をする（最初の週は売上。そのあとは魚介の料理の売上・甘い料理・皿数・料理の種類などから毎週変わる）。<br>白昼亭の目標は週の初めに決まる。白昼亭をタップしてお題と目標を見て、<b>お題に合う料理を棚に並べれば勝てる</b>。日曜が終わったときに結果発表。3勝で提携。'],
   ach:['実績と称号', '記録を達成すると、ごほうびのお金と<b>称号</b>がもらえる。<br>一覧は「図鑑」の「実績」タブ。手に入れた称号をタップすると、画面上の店の格のところに、ときどき称号が表示されるようになる。'],
   xfer:['データの引き継ぎ', '「コードを作る」で今のデータを文字のコードにできる。別の端末やブラウザで「コードで読み込む」に貼りつけると、続きから遊べる。<br><b>読み込むと、その端末の今のデータは上書きされる</b>。'],
   manual:['説明書', '下のタブの「説明書」で、解放した機能の細かい説明が読める。どこで何が取れるか、加工器具で何が作れるか、迷宮の層ごとの鉱石や魔物なども一覧で見られる。<br>機能が解放されるたびにページが増える。'],
@@ -3355,7 +3355,7 @@ function serveStall(i, el) {
   if (!takeDish(x.key, x.g, 1)) { x.left = 0; renderStall(); return; }
   x.left--; st.combo++; st.maxc = Math.max(st.maxc, st.combo); st.served++;
   const p = Math.round(dval(x.key, x.g) * (1.1 + .04 * Math.min(st.combo, 12)) * (curEvent() ? 1.2 : 1) * (cand.c.req.cat ? 1.1 : 1));
-  st.sales += p; S.gold += p; S.stat.sold++; S.stat.earned += p; cand.c.mood = 'ok'; cand.c.leave = .5; sfx('coin');
+  st.sales += p; S.gold += p; S.stat.sold++; S.stat.earned += p; rivalTrack(x.key, p); cand.c.mood = 'ok'; cand.c.leave = .5; sfx('coin');
   const f = document.createElement('div'); f.className = 'sfloat'; f.textContent = '+' + fmt(p) + 'G'; f.style.left = (17 + cand.k * 33) + '%'; $('stallv').appendChild(f); setTimeout(() => f.remove(), 900);
   renderStall();
 }
@@ -4133,7 +4133,7 @@ function nightStep(dt, vis) {
     if (fromSt) s.price = Math.round(v * .85);
     if (vis) spawnCustVis({slot:fromSt ? 0 : i, buy, re:buy ? (s.price <= v * .9 ? 'cheap' : 'fair') : 'no', price:s.price, kind:nk.k, ghost:1});
     if (!buy) continue;
-    if (fromSt) add(S.dish, s.key, -1); else s.n--; S.gold += s.price; r.buy++; r.earned += s.price; S.stat.sold++; S.stat.earned += s.price; S.stat.nightserved = (S.stat.nightserved || 0) + 1;
+    rivalTrack(s.key, s.price); if (fromSt) add(S.dish, s.key, -1); else s.n--; S.gold += s.price; r.buy++; r.earned += s.price; S.stat.sold++; S.stat.earned += s.price; S.stat.nightserved = (S.stat.nightserved || 0) + 1;
     if (mon) S.stat.monsold = (S.stat.monsold || 0) + 1;
     rep_.earned = (rep_.earned || 0) + s.price;
     if (Math.random() < .25 + (mon ? .3 : 0) + (nd ? .35 : 0)) {
@@ -4940,7 +4940,8 @@ const MAN = [
   {k:'abyss', t:'奈落の深層（B51〜）', c:() => unl('abyss'), h:() => li([
     '目標「支店をLv3にしよう」で解放。地下迷宮のB51から先が、どこまでも続く「奈落の深層」になる。',
     '降りるたびに6種類の階のどれかになる（5の倍数の階は昇降機のある「深層」）：' + DEEP_V.map(v => `<b>${DEEP_VN[v]}</b>＝${DEEP_VD[v]}`).join('／'),
-    '魔物の強さは10階ごとに×1.12（上限なし）。B61・B71…に初めて着くたびに最大体力+10。',
+    '魔物の強さは10階ごとに×1.12（B300より深い所は×1.05）。B61・B71…に初めて着くたびに最大体力+10。',
+    '<b>深さの記録</b>：B101より深く、新しく10階進むたびに、ずっと 攻撃×1.03・受けるダメージ÷1.03（迷宮・ダンジョン・闘技場のすべてで）。',
     '掘れる鉱石：ダイヤ・月長石・冥鉄・夜晶・星喰鉱・<b>奈落晶</b>（星喰以上のツルハシ）。奈落晶は魔物や宝箱からも出る。',
     '深層の食材：奈落茸・古都麦・冥府の根（地底の庭）、霧の実（毒霧の階）、星屑塩（鉱脈の階の岩・ほかの階でも少し）、深層獣の肉（魔物、とくに魔物の巣）。本『奈落の深層料理帖』（8,000G）に8品。',
     '<b>鍛え直し</b>（鍛冶屋ガルド）：奈落晶（2＋段階）と20,000G×(段階＋1)で、剣は攻撃+12%ずつ、防具は受けるダメージ÷(1＋0.1×段階)。上限なし。',
@@ -4964,8 +4965,9 @@ const MAN = [
   ]) + tbl(['寝かせる物', '熟成品', '★3から'], Object.entries(AGE).map(([id, a]) => [nmK(id), nmK(a.to) + '（' + ING[INGI[a.to]].value + 'G）', a.d + '日']))},
   {k:'rival', t:'ライバル店「白昼亭」', c:() => unl('rival'), h:() => li([
     '「修行の旅」の目標を達成すると、宵闇亭の右隣に白昼亭が建つ。開店は次の週の月曜から。店主はヒナタ。',
-    '毎週（月〜日曜）の<b>売上</b>で勝負。日曜が終わったとき（0時）に結果発表。売上には店・出張販売・裏営業・宴会・依頼などの売上がすべて入る。',
-    '白昼亭の目標売上は、最初の週は開店までのあなたの売上の勢い（1日平均×7×0.95）、その後は<b>あなたの前の週の売上</b>をもとに決まり、勝つたびに4%ずつ上がる。負けた次の週は、あなたのその週の売上の約93%が目標になる。',
+    '毎週（月〜日曜）の<b>お題</b>で勝負。日曜が終わったとき（0時）に結果発表。最初の週のお題は<b>売上</b>（店・出張販売・裏営業・宴会・依頼などすべて）。',
+    '2週目からのお題（毎週変わる）：売上／売った皿数／魚介の料理の売上／甘い料理の売上／魔物料理の売上／売れた料理の種類。皿数・種類は店・出張販売・裏営業で売れた分。',
+    '白昼亭の目標は週の初めに決まる：これまでの週のあなたの同じ数値の平均（ならし）×倍率（魚介・甘い・魔物＝1.15＋0.05×勝ち数、皿数・種類＝1.05＋0.02×勝ち数、売上＝1.02＋0.02×勝ち数）。負けが続くと、1敗ごとに目標が8%ずつ下がる（勝つと元に戻る）。<b>お題に合う料理を多く並べれば上回れる</b>。',
     '白昼亭をタップすると、今週の売上の比べ（白昼亭は日がたつにつれて増える）と残り日数、これまでの勝負が見られる。暦にも結果発表の日が載る。',
     '勝つと賞金（白昼亭の売上の約8%、最低5,000G）と評判。負けても失う物はない。',
     '<b>3回勝つと提携</b>：毎朝、白昼亭から売上の分け前（白昼亭の1日の売上の約12%）と、珍しい食材（サフラン・トリュフ・キャビア・バニラ・ドラゴンフルーツのどれか）が1つ届く。',
@@ -5216,7 +5218,30 @@ function rivalState() {
 function rivalGuess() { const R = S.rival, dd = (S.t - (R.t0 || S.t)) / 1440; return dd >= 1 ? Math.max(20000, Math.round(((S.stat.earned || 0) - (R.c0 || 0)) / dd * 7 * .95 / 1000) * 1000) : R.target; }
 function rivalFrac() { const R = S.rival; return Math.max(0, Math.min(1, (S.t - R.wk * 7 * 1440) / (7 * 1440))); }
 function rivalTheirs() { const R = S.rival, f = rivalFrac(); return Math.round(R.target * f * (1 + .06 * Math.sin(f * 9 + R.wk))); }
-function rivalMine() { return Math.max(0, (S.stat.earned || 0) - S.rival.start); }
+// v0.62 白昼亭は毎週の「お題」で勝負（売上・皿数・魚介・甘味・畑の作物・魔物料理・料理の種類）。目標はその週の初めに決まり、お題に合わせて棚を変えれば勝てる
+const RV_TH = {
+  sales:{n:'売上', u:'G', d:'今週の売上（店・出張販売・裏営業・宴会・依頼などすべて）', tip:'早めに開店し、棚を満杯に。高い料理を多く', ok:() => true},
+  dish:{n:'売った皿数', u:'皿', d:'今週、店と裏営業で売れた料理の皿数', tip:'安くて早く作れる料理をたくさん並べる。棚の数を増やす', ok:() => true},
+  sea:{n:'魚介の料理の売上', u:'G', d:'魚・貝・海藻など魚介を使った料理の売上', tip:'魚介の料理を棚に多く並べる。釣りと朝の魚市で材料を集める', ok:() => unl('fish')},
+  sweet:{n:'甘い料理の売上', u:'G', d:'砂糖・蜂蜜・チョコレートなどを使った料理の売上', tip:'菓子や甘い料理を多く並べる', ok:() => true},
+  mon:{n:'魔物料理の売上', u:'G', d:'魔物の素材を使った料理（魔）の売上', tip:'迷宮で素材を集め、魔物料理を並べる。裏営業の客も好む', ok:() => unl('monster')},
+  vari:{n:'売れた料理の種類', u:'種', d:'今週売れた料理の種類の数（同じ料理は1つ）', tip:'いろいろな料理を少しずつ並べる。棚の料理をこまめに入れかえる', ok:() => true},
+};
+const rvCat = (key, k) => { const ri = key && key[0] === 'r' ? +key.slice(1) : -1, r = REC[ri]; if (!r) return false;
+  return k === 'sea' ? r.ings.some(id => SEA_IDS.has(id)) : k === 'sweet' ? r.ings.some(id => SWEET_IDS.has(id) || ['cream', 'jam', 'custard', 'syrup', 'kuromitsu', 'anko', 'condensed'].includes(id)) : k === 'farm' ? r.ings.some(id => { const g = ING[INGI[id]]; return g && (g.src[0] === 'seed' || g.src[0] === 'tree'); }) : k === 'mon' ? isMonDish(key) : false; };
+function rivalTrack(key, price) { const R = S.rival; if (!R || R.ally || !unl('rival')) return; const m = R.m || (R.m = {});
+  m.sales = (m.sales || 0) + price; m.dish = (m.dish || 0) + 1; for (const k of ['sea', 'sweet', 'farm', 'mon']) if (rvCat(key, k)) m[k] = (m[k] || 0) + price;
+  const vs = R.vs || (R.vs = {}); if (!vs[key]) { vs[key] = 1; m.vari = (m.vari || 0) + 1; } }
+function rivalPickTheme() { const R = S.rival, last = R.th; const ks = Object.keys(RV_TH).filter(k => RV_TH[k].ok() && k !== last); return R.wins + R.losses === 0 ? 'sales' : pick(ks); }
+// 目標＝これまでの週の平均（ならし）×倍率。お題に合わせて棚を変えた週があっても、目標はゆっくりしか上がらない
+function rivalTarget(k) { const R = S.rival, E = R.ema || {}, wins = R.wins || 0, ease = Math.pow(.92, R.ls || 0);   // 負けが続くほど白昼亭も疲れてくる
+  if (k === 'sales') { const b = E.sales || R.target || 20000; return Math.max(20000, Math.round(b * (1.02 + .02 * wins) * ease / 1000) * 1000); }
+  const sales = E.sales || R.target || 20000;
+  const est = k === 'dish' ? sales / 150 : k === 'vari' ? 8 : sales * (k === 'mon' ? .05 : .1);
+  const v = (E[k] || est) * (k === 'dish' || k === 'vari' ? 1.05 + .02 * wins : 1.15 + .05 * wins) * ease;
+  return k === 'dish' || k === 'vari' ? Math.max(k === 'vari' ? 6 : 30, Math.round(v)) : Math.max(3000, Math.round(v / 100) * 100); }
+function rivalMine() { const R = S.rival; return R.th && R.th !== 'sales' ? ((R.m || {})[R.th] || 0) : Math.max(0, (S.stat.earned || 0) - R.start); }
+const rvFmt = (v, k) => RV_TH[k || 'sales'].u === 'G' ? fmt(v) + 'G' : fmt(v) + RV_TH[k || 'sales'].u;
 function rivalStep() {
   if (!unl('rival')) return; const R = rivalState();
   if (!R.intro && !simulating && !tutOpen && !$('intro')) { R.intro = 1; dirty = true; rivalIntro(); }
@@ -5224,25 +5249,25 @@ function rivalStep() {
   const wk = rivWk();
   if (wk < R.open) return;
   if (R.wk < R.open) R.wk = R.open;
-  if (!R.started) { R.started = 1; const dd = (S.t - (R.t0 || S.t)) / 1440; if (dd >= 1) R.target = Math.max(20000, Math.round(((S.stat.earned || 0) - (R.c0 || 0)) / dd * 7 * .95 / 1000) * 1000); R.start = S.stat.earned || 0; R.wk = wk; dirty = true; if (!simulating) toast(`☀ 白昼亭が開店した。今週の売上勝負が始まる（日曜が終わったときに結果発表）`, 4000); return; }
+  if (!R.started) { R.started = 1; const dd = (S.t - (R.t0 || S.t)) / 1440; if (dd >= 1) R.target = Math.max(20000, Math.round(((S.stat.earned || 0) - (R.c0 || 0)) / dd * 7 * .95 / 1000) * 1000); R.start = S.stat.earned || 0; R.wk = wk; R.th = 'sales'; R.m = {}; R.vs = {}; dirty = true; if (!simulating) toast(`☀ 白昼亭が開店した。今週の売上勝負が始まる（日曜が終わったときに結果発表）`, 4000); return; }
   if (wk > R.wk) rivalSettle(wk);
 }
 function rivalSettle(wk) {
-  const R = S.rival, mine = rivalMine(), theirs = R.target, win = mine > theirs;
-  R.hist.unshift({wk:R.wk, mine, theirs, win}); R.hist = R.hist.slice(0, 8);
+  const R = S.rival, mine = rivalMine(), theirs = R.target, win = mine > theirs, th = R.th || 'sales';
+  R.hist.unshift({wk:R.wk, mine, theirs, win, th}); R.hist = R.hist.slice(0, 8);
+  const mm = Object.assign({}, R.m || {}); mm.sales = Math.max(0, (S.stat.earned || 0) - R.start); R.mh = [mm, ...(R.mh || [])].slice(0, 2); R.ema = R.ema || {}; for (const k of Object.keys(RV_TH)) { const v = mm[k] || 0; R.ema[k] = R.ema[k] == null ? v : R.ema[k] * .7 + v * .3; }
   let gold = 0;
   if (win) { R.wins++; gold = Math.max(5000, Math.round(theirs * .08 / 100) * 100); S.gold += gold; S.rep = Math.min(100, S.rep + 3 * repDim()); } else R.losses++;
   // next week's target: based on your last week, grows with each win
-  R.target = Math.max(20000, Math.round(mine * (1 + .04 * R.wins) * (win ? 1 : .93) * (.95 + Math.random() * .1) / 1000) * 1000);   // v0.47: 上乗せ8%→4%、負けた次の週は×0.93
-  R.wk = wk; R.start = S.stat.earned || 0; dirty = true;
+  R.ls = win ? 0 : (R.ls || 0) + 1; R.wk = wk; R.start = S.stat.earned || 0; R.m = {}; R.vs = {}; R.th = rivalPickTheme(); R.target = rivalTarget(R.th); dirty = true;
   const allyNow = win && R.wins >= 3;
   if (allyNow) R.ally = true;
   if (simulating) { rep_.rival = win ? `白昼亭との売上勝負に勝った（+${fmt(gold)}G）` : '白昼亭との売上勝負に負けた'; if (allyNow) rep_.rival += '。白昼亭と提携した'; return; }
   const face = `<div class="tst">${charHTML('hinata', U * 22)}<div><div class="tth">白昼亭の店主 ${RIVAL_N}</div></div></div>`;
-  const tbl_ = `<div class="ttx">今週の売上<br>宵闇亭　<b>${fmt(mine)}G</b><br>白昼亭　<b>${fmt(theirs)}G</b></div>`;
+  const tbl_ = `<div class="ttx">今週のお題「${RV_TH[th].n}」<br>宵闇亭　<b>${rvFmt(mine, th)}</b><br>白昼亭　<b>${rvFmt(theirs, th)}</b></div>`;
   if (allyNow) popStory(`${face}<div class="tth">☀🌙 3勝目！</div>${tbl_}<div class="ttx">「……参った。あんたの店、夜になっても客が笑ってる。うちは昼しか開けてないのにね」<br>「勝負はおしまい。これからは<b>昼は白昼亭、夜は宵闇亭</b>。組まない？」<br><br><b>白昼亭と提携した</b>。毎朝、白昼亭から売上の分け前と珍しい食材が届く。賞金 +${fmt(gold)}G</div>`);
-  else if (win) popStory(`${face}<div class="tth">☀ 白昼亭に勝った！（${R.wins}勝）</div>${tbl_}<div class="ttx">「くっ……来週は負けないから！」<br>賞金 +${fmt(gold)}G・評判アップ。<br>白昼亭は来週、もっと売ってくる（あと${3 - R.wins}勝で決着）。</div>`);
-  else popStory(`${face}<div class="tth">白昼亭の勝ち……</div>${tbl_}<div class="ttx">「ふふん、昼の客はうちのものね」<br>負けても失う物はない。来週の白昼亭は、あなたの今週の売上をもとに目標を立ててくる。</div>`);
+  else if (win) popStory(`${face}<div class="tth">☀ 白昼亭に勝った！（${R.wins}勝）</div>${tbl_}<div class="ttx">「くっ……来週は負けないから！」<br>賞金 +${fmt(gold)}G・評判アップ。<br>白昼亭は来週、もっと手ごわくなる（あと${3 - R.wins}勝で決着）。</div><div class="ttx">来週のお題：<b>${RV_TH[R.th].n}</b>（白昼亭の目標 ${rvFmt(R.target, R.th)}）<br>${RV_TH[R.th].tip}</div>`);
+  else popStory(`${face}<div class="tth">白昼亭の勝ち……</div>${tbl_}<div class="ttx">「ふふん、昼の客はうちのものね」<br>負けても失う物はない。</div>` + (R.ally ? '' : `<div class="ttx">来週のお題：<b>${RV_TH[R.th].n}</b>（白昼亭の目標 ${rvFmt(R.target, R.th)}）<br>${RV_TH[R.th].tip}</div>`));
 }
 function rivalMorning() {
   const R = S.rival, bd = bday(); if (R.day === bd) return; R.day = bd;
@@ -5260,15 +5285,15 @@ function openRival() {
   if (R.ally) html += `<div class="p">☀🌙 <b>提携中</b>。毎朝、売上の分け前（今は約${fmt(Math.max(1000, Math.round(R.target / 7 * .12 / 100) * 100))}G）と珍しい食材が1つ届く。</div>`;
   else if (rivWk() < R.open) html += `<div class="p">開店準備中。<b>来週の月曜</b>から売上勝負が始まる。白昼亭の最初の目標は、開店までのあなたの売上の勢いをもとに決まる（今の見込み 約${fmt(rivalGuess())}G）。</div>`;
   else {
-    const mine = rivalMine(), th = rivalTheirs(), left = 7 - (gday() % 7) - 1, mx = Math.max(mine, R.target, 1);
+    const T = R.th || 'sales', mine = rivalMine(), th = rivalTheirs(), left = 7 - (gday() % 7) - 1, mx = Math.max(mine, R.target, 1);
     const bar = (v, c) => `<div style="height:calc(var(--u)*3);background:#1a1410;border-radius:3px;overflow:hidden"><i style="display:block;height:100%;width:${Math.min(100, v / mx * 100)}%;background:${c}"></i></div>`;
-    html += `<div class="h">今週の売上勝負（${R.wins}勝${R.losses}敗・3勝で決着）</div>
-      <div class="row"><div class="t"><b>🌙 宵闇亭　${fmt(mine)}G</b>${bar(mine, '#c8a050')}</div></div>
-      <div class="row"><div class="t"><b>☀ 白昼亭　${fmt(th)}G</b><span>今週の目標 ${fmt(R.target)}G</span>${bar(th, '#e8e0c8')}</div></div>
+    html += `<div class="h">今週のお題「${RV_TH[T].n}」（${R.wins}勝${R.losses}敗・3勝で決着）</div><div class="p">${RV_TH[T].d}で勝負。<br>💡 ${RV_TH[T].tip}</div>
+      <div class="row"><div class="t"><b>🌙 宵闇亭　${rvFmt(mine, T)}</b>${bar(mine, '#c8a050')}</div></div>
+      <div class="row"><div class="t"><b>☀ 白昼亭　${rvFmt(th, T)}</b><span>今週の目標 ${rvFmt(R.target, T)}（白昼亭は週の終わりにここまで届く）</span>${bar(th, '#e8e0c8')}</div></div>
       <div class="p">${left > 0 ? `結果発表まであと<b>${left}日</b>（日曜が終わったとき）。` : '<b>今日が最終日</b>。今夜の0時に結果発表。'}${mine > th ? '今のところ<b>宵闇亭が上</b>。' : '今のところ白昼亭が上。'}</div>
-      <div class="p" style="color:var(--sub)">売上を伸ばすには：早めに開店する／棚を満杯にしておく／行事・流行の料理を出す／宴会や依頼をこなす／出張販売と裏営業の売上も数に入る。</div>`;
+      <div class="p" style="color:var(--sub);${T === 'sales' ? '' : 'display:none'}">売上を伸ばすには：早めに開店する／棚を満杯にしておく／行事・流行の料理を出す／宴会や依頼をこなす／出張販売と裏営業の売上も数に入る。</div>`;
   }
-  if (R.hist.length) html += `<div class="h">これまでの勝負</div>` + R.hist.map(h => `<div class="row"><div class="calev">${h.win ? '🏆' : '・'}</div><div class="t"><b>${(o => MONTHS[o.m] + o.dd + '日の週')(ymd(h.wk * 7))}　${h.win ? '勝ち' : '負け'}</b><span>宵闇亭 ${fmt(h.mine)}G ／ 白昼亭 ${fmt(h.theirs)}G</span></div></div>`).join('');
+  if (R.hist.length) html += `<div class="h">これまでの勝負</div>` + R.hist.map(h => `<div class="row"><div class="calev">${h.win ? '🏆' : '・'}</div><div class="t"><b>${(o => MONTHS[o.m] + o.dd + '日の週')(ymd(h.wk * 7))}　${h.win ? '勝ち' : '負け'}</b><span>${h.th ? RV_TH[h.th].n + '：' : ''}宵闇亭 ${rvFmt(h.mine, h.th)} ／ 白昼亭 ${rvFmt(h.theirs, h.th)}</span></div></div>`).join('');
   modal('白昼亭', html, 'rival');
 }
 function drawForgeHut() {
@@ -5422,7 +5447,10 @@ const DEEP_VN = {deep:'深層', mist:'毒霧の階', dark:'暗闇の階', vein:'
 const DEEP_VD = {deep:'古い地下都市の跡', mist:'毒の霧で体力がじわじわ減る。霧の実が採れる', dark:'自分のまわりしか見えない。宝箱がある', vein:'鉱石と宝石が多い', den:'魔物が多い。深層獣の肉を落とす', garden:'魔物がいない。深層の食材が採れる'};
 const DEEP_MONS = ['meibeast', 'shade', 'darkbird', 'slimed'];
 const isDeep = f => unl('abyss') && f > 50;
-const deepSc = f => 2.225 * Math.pow(1.12, (f - 51) / 10);
+// v0.62 深層の壁をなくす：B300より深い所は10階ごと×1.05に。深さの記録（B101〜）10階ごとに攻撃×1.03・受けるダメージ÷1.03（ずっと）
+const deepSc = f => f <= 300 ? 2.225 * Math.pow(1.12, (f - 51) / 10) : 2.225 * Math.pow(1.12, 24.9) * Math.pow(1.05, (f - 300) / 10);
+const deepRecN = () => Math.max(0, Math.floor(((S.mine && S.mine.max) || 0) - 100) / 10 | 0);
+const deepMul = () => Math.pow(1.03, deepRecN());
 const forgeMulS = () => 1 + .12 * (S.forgeS || 0), forgeMulA = () => 1 / (1 + .1 * (S.forgeA || 0));
 function deepGen(fl) {
   const f = fl.f, M = mineState(), cp = f % 5 === 0;
@@ -6070,7 +6098,7 @@ function hitMon(t, dmg, st, f, crit) {
 }
 function doAttack(m) {
   const st = wStats(), f = gearFx(), M = mineState();
-  let dmg = st.base * st.m * (st.rm || 1) * (buffOn('atk') ? 1.5 : 1) * forgeMulS() * monDmgMul(m.k) * atkMulFx(f) * wmMul();
+  let dmg = st.base * st.m * (st.rm || 1) * (buffOn('atk') ? 1.5 : 1) * forgeMulS() * monDmgMul(m.k) * atkMulFx(f) * wmMul() * deepMul();
   const crCh = .05 + (st.cr || 0) + .1 * (f.crit || 0) + .2 * (f.crit2 || 0) + .25 * (f.moon || 0) + .1 * (f.hero || 0) + .15 * (f.martha || 0) + (gearAccOn('neck_fang') ? .1 : 0);
   const crit = Math.random() < crCh; if (crit) dmg *= f.moon ? 3 : 2;
   wSwingT = .22; sfx('pop');
@@ -6748,7 +6776,7 @@ function dgChest() {
 }
 // ---- ボスの動き
 function playerHurt(atk, mul = 1) {
-  const M = mineState(), dmg = Math.max(1, Math.round(atk * mul * (buffOn('def') ? .6 : 1) * (1 - armorDef() - (outfitOn('knight') ? .05 : 0)) * forgeMulA() * defMulFx()));
+  const M = mineState(), dmg = Math.max(1, Math.round(atk * mul * (buffOn('def') ? .6 : 1) * (1 - armorDef() - (outfitOn('knight') ? .05 : 0)) * forgeMulA() * defMulFx() / deepMul()));
   M.hp -= dmg; hurtT = .25; floatAt(player.x, player.y - 20, '-' + dmg, 'bad'); sfx('break'); if (M.hp <= 0) { mineDie(); return true; } return false;
 }
 function bossZones(m, p) {
@@ -6864,7 +6892,8 @@ function mrAdd(k, sh, why) {
 function mrTame(m) {
   if (!unl('mranch') || m.boss || m.elite || !MONT[m.k] || monStar(m.k) < 1) return;
   const M = mineState(), p = .005 * (M.charm ? 3 : 1) * (1 + .1 * (FL && FL.curse || 0)) * (isFullMoon() ? 2 : 1);
-  if (Math.random() < p) mrAdd(m.k, Math.random() < .02, `倒れた${MONT[m.k].n}が、起き上がってこちらを見つめている……なついたようだ。`);
+  const R = mrSt(); R.tp = (R.tp || 0) + p;   // v0.62 天井：確率の合計が0.3（ふつう約60体）でなつかなければ、次は必ず
+  if (Math.random() < p || R.tp >= .3) { R.tp = 0; mrAdd(m.k, Math.random() < .02, `倒れた${MONT[m.k].n}が、起き上がってこちらを見つめている……なついたようだ。`); }
 }
 function eggKind(fl) { return fl.dg ? (fl.dg === 'mirror' ? 'dark' : fl.dg) : fl.v ? 'dark' : ['cave', 'crystal', 'fire', 'ice', 'dark', 'dark'][layerOf(fl.f)]; }
 function mrEggDrop(fl, p) { if (!unl('mranch') || !fl || Math.random() > p) return; const id = ING.find(g => g.src[0] === 'mregg' && g.src[1] === eggKind(fl)).id; giveBag('i', id, false, 1); tripAdd(id, 1); S.known.i[id] = true; toast(`🥚 ${ingName(id)}を拾った！ 魔物牧場の孵化小屋で孵せる`, 3000); }
@@ -7152,7 +7181,7 @@ function drawTrial(m) { const a = .35 + Math.sin(tNow * 5) * .15; ctx.fillStyle 
 // ---- 宝の地図
 const TM_PLACES = () => [...BIOS.filter(b => b.cond()).map(b => [b.sc, b.n]), ...(unl('expedition') ? EXP_TOWNS.filter(t => townOpen(t.id)).map(t => [t.id, t.n]) : [])];
 function tmSt() { if (!S.tmap) S.tmap = {maps:[], found:0}; return S.tmap; }
-function tmDrop(p, why) { if (!unl('tmap') || Math.random() > p) return; const T = tmSt(); if (T.maps.length >= 5) return; const pl = pick(TM_PLACES()); if (!pl) return; T.maps.push({sc:pl[0], n:pl[1]}); S.known.i.tmap = true; dirty = true; tut('tmap'); toast(`🗺 宝の地図を拾った！（${why}）×印は<b>${pl[1]}</b>のどこか`, 4000); }
+function tmDrop(p, why) { if (!unl('tmap')) return; const T = tmSt(); if (T.maps.length >= 5) return; T.tp = (T.tp || 0) + p; if (Math.random() > p && T.tp < 1) return; T.tp = 0;   /* v0.62 天井：確率の合計が1になったら必ず */ const pl = pick(TM_PLACES()); if (!pl) return; T.maps.push({sc:pl[0], n:pl[1]}); S.known.i.tmap = true; dirty = true; tut('tmap'); toast(`🗺 宝の地図を拾った！（${why}）×印は<b>${pl[1]}</b>のどこか`, 4000); }
 function tmSpot(m) { if (m.x) return m; for (let t = 0; t < 200; t++) { const x = Math.round(rnd(16, 128)), y = Math.round(rnd(60, (IMG['bg_' + m.sc] || bgImg()).height - 30)); if (WALK[m.sc] && walkable(m.sc, x, y) && walkable(m.sc, x, y + 8)) { m.x = x; m.y = y; return m; } } m.x = 72; m.y = 120; return m; }
 function tmObjs() { if (!S.tmap || !unl('tmap')) return []; return S.tmap.maps.filter(m => m.sc === scene).map(m => { tmSpot(m); return {id:'tm' + m.x, lb:'宝の地図の×印を掘る', r:[m.x - 10, m.y - 6, m.x + 10, m.y + 6], st:[m.x, m.y + 10], act:() => tmDig(m)}; }); }
 function tmDig(m) {
@@ -7257,6 +7286,7 @@ function todoList() {
   const out = [], add_ = (i, t, go_) => out.push({i, t, go:go_});
   const ripe = PIDX().filter(j => ready(S.plots[j])).length; if (ripe) add_('🌾', `農場の作物が${ripe}つ実っている`, 'farm');
   const empty = PIDX().filter(j => !S.plots[j].seed).length; if (empty && unl('quality')) add_('🌱', `農場の空いた区画が${empty}つ`, 'farm');
+  if (unl('stele') && typeof stSt === 'function') { const T = stSt(), n = STELE_T.filter(x => T.got[x]).length; if (n < 5) add_('🪨', `石碑の紋 ${n}/5（まだ：${STELE_T.filter(x => !T.got[x]).map(x => (TOWNC[x] || {}).n || x).join('・')}の広場）`, 'expmap'); }
   if (S.fac.cellar && S.cellar && S.cellar.slots) { const n = S.cellar.slots.filter(x => x && celDone(x)).length; if (n) add_('🍷', `地下貯蔵庫の熟成が${n}台できあがった`, 'cellar'); }
   if (unl('orders') && S.orders) { const n = S.orders.filter(o => haveDish('r' + o.ri, false) + haveDish('r' + o.ri, true) >= o.n).length; if (n) add_('📜', `届けられる依頼が${n}件（掲示板）`, 'outside');
     else if (!(S.stat.orders > 0) && S.orders.length) { const o = S.orders[0]; add_('📜', `依頼：${REC[o.ri].name}を${o.n}皿作って届ける（${recHint(o.ri)}）`, 'outside'); } }
@@ -7278,7 +7308,7 @@ const TRAVEL = [['interior', '宵闇亭（店内）', 109, 108, () => true], ['o
   ['cellar', '地下貯蔵庫', 124, 66, () => S.fac.cellar > 0], ['upstairs', '2階', 38, 266, () => S.fac.upstairs > 0], ['guild', '冒険者ギルド', 72, 296, () => unl('guild')], ['mranch', '魔物牧場と薬草園', 72, 306, () => unl('mranch')], ['museum', '博物館', 72, 276, () => unl('museum')], ['oldtown', '旧市街', 74, 310, () => unl('restore')]];
 function travelOk() { return !['mine', 'mfarm'].includes(scene) && !isBio() && !TOWNC[scene] && !fishSt; }
 function goTravel(k) {
-  if (k === 'cara') return openCaravan(); if (k === 'tmap') return openTmList(); if (k === 'squad') return openSquad(); if (k === 'oorder') return openAiRecs(); if (!k) return;
+  if (k === 'cara') return openCaravan(); if (k === 'tmap') return openTmList(); if (k === 'squad') return openSquad(); if (k === 'oorder') return openAiRecs(); if (k === 'expmap') return openExpMap(); if (!k) return;
   if (!travelOk()) return toast(TOWNC[scene] ? '遠征先からは馬車で帰ろう' : 'ここからは移動できない（迷宮・採集地では使えない）');
   const t = TRAVEL.find(x => x[0] === k); if (!t || !t[4]()) return; closeModal(); go(t[0], t[2], t[3]);
 }
@@ -7286,7 +7316,7 @@ function openTodo(tab) {
   tab = tab || 'todo'; tut('todo'); const L = todoList();
   const seg = `<div class="seg"><div class="${tab === 'todo' ? 'on' : ''}" data-tt="todo">やること ${L.length}</div><div class="${tab === 'log' ? 'on' : ''}" data-tt="log">お知らせの履歴</div><div class="${tab === 'go' ? 'on' : ''}" data-tt="go">移動</div></div>`;
   let body = '';
-  if (tab === 'todo') body = L.map(x => `<div class="row"><div class="calev">${x.i}</div><div class="t"><b>${x.t}</b></div>${x.go ? `<div class="btn" data-g="${x.go}">${['cara', 'tmap', 'squad', 'oorder'].includes(x.go) ? '見る' : '行く'}</div>` : ''}</div>`).join('') || '<div class="p">いまは急いでやることはない。のんびりいこう。</div>';
+  if (tab === 'todo') body = L.map(x => `<div class="row"><div class="calev">${x.i}</div><div class="t"><b>${x.t}</b></div>${x.go ? `<div class="btn" data-g="${x.go}">${['cara', 'tmap', 'squad', 'oorder', 'expmap'].includes(x.go) ? '見る' : '行く'}</div>` : ''}</div>`).join('') || '<div class="p">いまは急いでやることはない。のんびりいこう。</div>';
   else if (tab === 'log') body = TLOG.map(x => `<div class="row"><div class="t"><span style="font-size:${U * 3.9}px;color:#e8d8b8">${x.t}</span></div></div>`).join('') || '<div class="p">まだお知らせはない。</div>';
   else body = `<div class="p">${travelOk() ? 'ワンタップで移動できる（歩く時間を省く）。' : '<span style="color:#d8806a">迷宮・採集地・遠征先では使えない。</span>'}</div>` + TRAVEL.filter(t => t[4]()).map(t => `<div class="row"><div class="t"><b>${t[1]}</b></div><div class="btn ${scene === t[0] || !travelOk() ? 'dis' : 'grn'}" data-g="${t[0]}">${scene === t[0] ? 'いまここ' : '移動'}</div></div>`).join('') +
     `${unl('mine') ? '<div class="btn" data-a="mine" style="margin-top:3px">⛏ 地下迷宮へ（古井戸）</div>' : ''}${unl('forage') ? '<div class="btn" data-a="bio" style="margin-top:3px">🗺 採集の地図</div>' : ''}${unl('expedition') ? '<div class="btn" data-a="exp" style="margin-top:3px">⚓ 遠征の地図</div>' : ''}`;
@@ -8010,7 +8040,7 @@ function mineUpdate(dt) {
     if (d < (FL.f <= 5 ? 45 : 70) * (buffOn('p_stealth') ? .5 : 1)) {
       if (d > 8) { const sp = t.spd * dt * (m.slow > 0 ? .5 : 1), nx = m.x + (player.x - m.x) / d * sp, ny = m.y + (player.y - m.y) / d * sp;
         if (t.fly || walkable('mine', nx | 0, ny | 0)) { m.x = nx; m.y = ny; } else if (walkable('mine', nx | 0, m.y | 0)) m.x = nx; else if (walkable('mine', m.x | 0, ny | 0)) m.y = ny; m.flip = player.x < m.x; }
-      else if (m.cd <= 0) { m.cd = 1.1; const dmg = Math.max(1, Math.round(m.atk * (buffOn('def') ? .6 : 1) * (1 - armorDef() - (outfitOn('knight') ? .05 : 0)) * forgeMulA() * defMulFx())); M.hp -= dmg; hurtT = .25; floatAt(player.x, player.y - 20, '-' + dmg, 'bad'); sfx('break'); if (M.hp <= 0) return mineDie(); }
+      else if (m.cd <= 0) { m.cd = 1.1; const dmg = Math.max(1, Math.round(m.atk * (buffOn('def') ? .6 : 1) * (1 - armorDef() - (outfitOn('knight') ? .05 : 0)) * forgeMulA() * defMulFx() / deepMul())); M.hp -= dmg; hurtT = .25; floatAt(player.x, player.y - 20, '-' + dmg, 'bad'); sfx('break'); if (M.hp <= 0) return mineDie(); }
     } else { m.wait -= dt; if (m.wait <= 0) { m.wait = rnd(1.5, 4); const p = randWalk(FL); m.path = [p]; } if (m.path.length) { const p = m.path[0], dd = Math.hypot(p[0] - m.x, p[1] - m.y); if (dd < 2) m.path.shift(); else { const nx = m.x + (p[0] - m.x) / dd * t.spd * .5 * dt, ny = m.y + (p[1] - m.y) / dd * t.spd * .5 * dt; if (t.fly || walkable('mine', nx | 0, ny | 0)) { m.x = nx; m.y = ny; } else m.path = []; } } }
   }
 }
