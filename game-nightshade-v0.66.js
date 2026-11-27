@@ -183,6 +183,7 @@ const UNL = {
   secret:{n:'迷宮の隠し部屋', i:'🧱', d:'迷宮やダンジョンの階に、ひび割れた壁が現れるようになった。崩すと昔の冒険者の隠し部屋がある。', tut:'secret'},
   moon:{n:'満月の夜', i:'🌕', d:'毎週木曜の夜は満月。広場に月の兎の夜店が出て、迷宮には月光スライムが現れ、魔物がなつきやすくなる。', tut:'moon'},
   stele:{n:'石碑と封印の扉', i:'🪨', d:'5つの町の広場に、古い石碑が見えるようになった。紋を集めると、地下迷宮B1の封印の扉が開く。', tut:'stele'},
+  raid:{n:'週替わりの大物討伐', i:'⚔', d:'ギルドランクCになり、<b>大物討伐</b>に参加できるようになった。ギルドの受付から、町はずれの大物にいどもう。', tut:'m_raid'},
   course:{n:'コース料理と予約客', i:'📖', d:'店の格が「伝説の宵闇亭」になり、<b>コースの予約</b>が入るようになった。店内の「📖予約」で、前菜・主菜・デザートをそろえよう。', tut:'m_course'},
   shugyo:{n:'霊峰の修練の塔・技・武器の成長', i:'🗼', d:'奈落の深層B60にたどり着き、古井戸の奥の転移の石から「霊峰の修練の塔」へ行けるようになった。武器の<b>技</b>（ゲージ）と<b>武器の成長・覚醒</b>、<b>銘の武器</b>（12系列）も始まる。', tut:'m_tower'},
   hill:{n:'丘の農地', i:'⛰', d:'裏の農場のいちばん下の道から、奥の「丘の農地」へ行けるようになった。土地を買うと、畑・果樹・特別な畑・動物が増やせる。', tut:'m_hill'},
@@ -933,6 +934,8 @@ function step(dt, vis) {
   if (typeof hillStep === 'function') { hillUnl(); hillStep(dt, vis); }
   if (typeof twUnl === 'function') twUnl();
   if (!unl('course') && rankIdx() >= 4) unlockFeature('course');
+  if (!unl('raid') && unl('guild') && guildState().rank >= 3) unlockFeature('raid');
+  if (typeof rdStep === 'function') rdStep();
   if (typeof crsStep === 'function') crsStep();
   if (soilOn() && !S.soilIntro && !simulating && (scene === 'farm' || scene === 'hill')) { S.soilIntro = 1; tut('m_soil'); }
   if (S.aucPre) aucPreStep();
@@ -1108,7 +1111,7 @@ function deliverOrder(i, re) {
 }
 // ====================================================== rendering
 let tNow = 0, camY = 0;
-const bgImg = () => scene === 'guild' ? IMG['bg_guild' + guildStage()] : scene === 'mine' ? (FL && FL.arena ? IMG.bg_arena : FL && FL.vault ? IMG.bg_vault : FL && FL.ak ? IMG.bg_ancient : FL && FL.dg === 'tower' ? IMG[(FL.boss ? 'bg_twb' : 'bg_tw') + twBand(Math.min(30, FL.f))] : FL && FL.dg ? IMG[(FL.boss ? 'bg_dgb_' : 'bg_dg_') + FL.dg] : FL && FL.v ? IMG['bg_deep_' + FL.v] : IMG['bg_mine' + layerOf(FL ? FL.f : 1)]) : scene === 'farm' ? IMG[S.fac.orchard ? (S.fac.greenhouse ? 'bg_farm4' : 'bg_farm3') : (S.fac.greenhouse ? 'bg_farm2' : 'bg_farm')] : IMG['bg_' + scene];
+const bgImg = () => scene === 'guild' ? IMG['bg_guild' + guildStage()] : scene === 'mine' ? (FL && FL.arena ? (FL.arena.raid ? IMG.bg_raid : IMG.bg_arena) : FL && FL.vault ? IMG.bg_vault : FL && FL.ak ? IMG.bg_ancient : FL && FL.dg === 'tower' ? IMG[(FL.boss ? 'bg_twb' : 'bg_tw') + twBand(Math.min(30, FL.f))] : FL && FL.dg ? IMG[(FL.boss ? 'bg_dgb_' : 'bg_dg_') + FL.dg] : FL && FL.v ? IMG['bg_deep_' + FL.v] : IMG['bg_mine' + layerOf(FL ? FL.f : 1)]) : scene === 'farm' ? IMG[S.fac.orchard ? (S.fac.greenhouse ? 'bg_farm4' : 'bg_farm3') : (S.fac.greenhouse ? 'bg_farm2' : 'bg_farm')] : IMG['bg_' + scene];
 const sceneH = () => bgImg().height;
 let VIEW_BOTTOM = 224; const VIEW_TOP = 30, OFF = 14; // world y16 -> screen row 30
 function drawChar(k, x, y, flip = false, seated = false, world = true) {
@@ -1326,12 +1329,12 @@ function hud() {
   const ev = curEvent(), tr = trendText(), luck = S.luckT > S.t ? ' 🐈幸運' : '';
   const ph = (frame.n || 0) % 600, wt = wx().d ? `${wx().n}：${wx().d}` : '';
   $('trend').textContent = (ev && ph < 200 ? '行事：' + ev.n : wt && ph >= 400 ? wt : tr || wt) + luck + (S.luck3T > S.t ? ' ✨月光' : '');
-  $('loc').textContent = scene === 'mine' && FL ? (FL.arena ? '闘技場' : FL.vault ? '隠し部屋' : FL.ak ? '古の厨房' : FL.dg ? (FL.boss ? '最奥' : FL.f + '階') : `B${FL.f}`) : SCENES[scene].short;
+  $('loc').textContent = scene === 'mine' && FL ? (FL.arena ? (FL.arena.raid ? '討伐場' : '闘技場') : FL.vault ? '隠し部屋' : FL.ak ? '古の厨房' : FL.dg ? (FL.boss ? '最奥' : FL.f + '階') : `B${FL.f}`) : SCENES[scene].short;
   const g = GOALS[S.goal];
   const rs = S.resv ? `🍷宴会 ${dishInfo(S.resv.key).name}×${S.resv.n}（あと${fmtLeft(S.resv.due - S.t)}）` : '';
   const gl = g ? `目標：${g.t}` : rs || '目標はすべて達成！';
   if (scene === 'mine' && FL) { const M = mineState(), b = (v, mx, c) => `<span style="position:relative;display:inline-block;width:${U * 26}px;height:${U * 4.2}px;background:#140c08;vertical-align:middle;margin:0 ${U * .8}px;border:1px solid #3a2a1e;border-radius:2px;overflow:hidden"><i style="display:block;height:100%;width:${Math.max(0, Math.min(100, v / mx * 100))}%;background:${c}"></i><b style="position:absolute;inset:0;text-align:center;line-height:${U * 4.2}px;font-size:${U * 3.4}px;color:#fff;text-shadow:0 0 2px #000,0 0 2px #000">${Math.max(0, Math.round(v))}/${Math.round(mx)}</b></span>`;
-    const h = `<div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${FL.arena ? (FL.arena.boss ? '闘技場：ボスと再戦' : `闘技場 第${FL.arena.wave}波${FL.arena.mode ? '/' + FL.arena.mode : ''}`) : FL.vault ? '隠し部屋' : FL.ak ? '古の厨房' : FL.dg ? DGD[FL.dg].n : FL.v ? DEEP_VN[FL.v] : LAYERS[layerOf(FL.f)].n}　<span style="color:#e8c060">Lv${plSt().lv}</span>${FL.curse ? '🗿' + FL.curse : ''}${buffOn('atk') ? ' ⚔' : ''}${buffOn('mine') ? ' ⛏' : ''}${buffOn('def') ? ' 🛡' : ''}</div><div style="white-space:nowrap">体力${b(M.hp, M.hpMax, '#c83a3a')}気力${b(M.st, M.stMax, '#4ab05a')}</div>`;
+    const h = `<div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${FL.arena ? (FL.arena.raid ? `大物討伐　残り${Math.ceil(FL.arena.left)}秒` : FL.arena.boss ? '闘技場：ボスと再戦' : `闘技場 第${FL.arena.wave}波${FL.arena.mode ? '/' + FL.arena.mode : ''}`) : FL.vault ? '隠し部屋' : FL.ak ? '古の厨房' : FL.dg ? DGD[FL.dg].n : FL.v ? DEEP_VN[FL.v] : LAYERS[layerOf(FL.f)].n}　<span style="color:#e8c060">Lv${plSt().lv}</span>${FL.curse ? '🗿' + FL.curse : ''}${buffOn('atk') ? ' ⚔' : ''}${buffOn('mine') ? ' ⛏' : ''}${buffOn('def') ? ' 🛡' : ''}</div><div style="white-space:nowrap">体力${b(M.hp, M.hpMax, '#c83a3a')}気力${b(M.st, M.stMax, '#4ab05a')}</div>`;
     if ($('goal').dataset.h !== h) { $('goal').innerHTML = h; $('goal').dataset.h = h; $('goal').style.whiteSpace = 'normal'; } }
   else if ($('goal').dataset.h !== gl) { $('goal').textContent = gl + ' ▼'; $('goal').dataset.h = gl; $('goal').style.whiteSpace = ''; }
   if (goalOpen) {
@@ -2913,6 +2916,7 @@ const TUT = {
   m_tower:['霊峰の修練の塔', '古井戸（地下迷宮の入口）の「🗼霊峰の修練の塔へ」から行ける。全30階＋頂。どの階も敵を全部倒すと階段が出る。10階・20階・頂に<b>階の主</b>。<br><b>鎧</b>（青いゲージ）を着た敵は<b>技でしか鎧を割れない</b>。盾持ちはふつうの攻撃を7割防ぐ。<br>階を制すると<b>修練の証</b>。証は覚醒と、好きな<b>銘の武器</b>との交換に使う。'],
   m_skill:['技', '攻撃を当てる（または攻撃を受ける）と、足元のゲージがたまる。満タンになったら、画面上の<b>「⚔技！」</b>を押そう。<br>技は武器の種類で決まる（剣＝回転斬り、短剣＝連撃、槍＝突進突き、槌・斧＝大地割り、弓＝矢の雨、杖＝魔法陣、包丁＝解体、鎌＝大旋風、鞭＝縛り打ち）。<b>銘の武器</b>は技に追加効果がのる。'],
   m_wgrow:['武器の成長と覚醒', '装備している武器は、魔物を倒すと経験がたまり<b>Lv</b>が上がる（Lvごとに攻撃+2%、Lv20まで）。<br>Lv20の<b>銘・伝説・ボスの武器</b>は、鍛冶屋の工房で<b>覚醒</b>できる（攻撃×1.2・技1.5倍・付与の枠+1、名前に「真・」）。覚醒のあとも、使うほど上限なしで+1%ずつ強くなる。'],
+  m_raid:['週替わりの大物討伐', '毎週月曜、町はずれに<b>大物</b>が現れる（毎週入れかわり）。ギルドの冒険者たちと一緒に、日曜が終わるまでに体力を削りきろう。<br>ギルドの受付の「⚔ 大物討伐」から、<b>1回90秒</b>（1日3回）戦える。与えたダメージは記録され、倒れても何も失わない。<br>日曜が終わると<b>ダメージの順位</b>でごほうび。倒しきれたら2倍。'],
   m_course:['コース料理と予約客', '毎朝6時に、その日の夜（18:30〜21:00）の<b>コースの予約</b>が0〜2組入る。店内の画面上の<b>「📖予約」</b>で、倉庫の料理から<b>前菜・主菜・デザート</b>を人数ぶん選んでおこう。<br>時間になるとお客さんが来て食べる。<b>食べ合わせの点数</b>（役割に合う・食材がかぶらない・調理法がばらばら・好み・旬と品質）で、お代が最大2.5倍になる。用意できないと評判-1。'],
   m_soil:['畑の土と輪作', '畑の区画には<b>土の肥えぐあい</b>がある（区画の色：黒っぽい＝肥えた土、白っぽい＝やせた土、ひび＝カラカラ）。<br>同じ仲間の作物（葉もの・根もの・実もの・豆・穀物・いも・香草・きのこ）を続けて育てると<b>連作</b>で土がやせ、品質も下がる。<b>ちがう仲間</b>を順に育てる（輪作）と品質と量が上がる。<br><b>豆</b>（大豆・枝豆・落花生）は土を肥やす。肥料をまく・たい肥をすき込む・区画を空けて休ませても戻る。'],
   m_hill:['丘の農地', '裏の農場のいちばん下から行ける、奥の丘。下の<b>立て札</b>で土地を買う（1区→2区→3区の順）。<br>1区ごとに<b>畑8区画・果樹4本</b>が増える。畑の扱い（種・水やり・道具・農夫）は裏の農場と同じ。<br>植えた苗木は、木をタップして<b>「抜く」</b>と植え替えられる（苗木代の半分が戻る）。'],
@@ -4842,6 +4846,9 @@ const MAN = [
     '<b>武器の成長</b>：装備中の武器で倒すと経験（ふつう1＋深さ/25、ボス40）。次のLvまで 20＋10×Lv。Lvごとに攻撃+2%（Lv20で+38%）。',
     '<b>覚醒</b>（銘・伝説・ボスの武器、Lv20）：工房で 奈落晶×5・修練の証×10・50,000G。攻撃×1.2・技1.5倍・付与の枠+1、名前に「真・」と光る絵。覚醒のあとは 300＋20×覚醒Lv の経験ごとに+1%（上限なし）。',
     '<b>修練の塔</b>：全30階＋頂（31階）。魔物の強さは、あなたの深層の最深記録の85%の深さに合わせて決まる（B60より浅い記録ならB60相当）。魔物は小鬼（大群れ）・盾持ちの石兵（ふつうの攻撃を7割防ぐ。ひるんでいる間は防げない）・鎧武者（鎧）・修行僧の亡霊・山の鷹。10階＝石の門番ゴーレム、20階＝鎧の大将、頂＝天狗の大師範（どれも鎧つき）。階を初めて制すると証+3（2回目から+1）、階の主は証+10（頂+20）と賞金と銘の武器。11階・21階から登れる。呪いもかけられる。'])},
+  {k:'raid', t:'週替わりの大物討伐', c:() => rdOn(), h:() => li(['解放：ギルドランクC。ギルドの受付に「⚔ 今週の大物討伐」。', '大物（4体が週ごとに入れかわり）：' + RD_KEYS.map(k => RD[k].n).join('・') + '。体力はその週の初めに、あなたの攻撃力（1秒あたりのダメージ×900秒ぶん）で決まる。攻撃の強さは最深記録の8割の深さの魔物ぐらい。',
+    'ギルドの冒険者5人（' + RD_NPC.join('・') + '）が毎朝6時に少しずつ削る（合わせて最大体力の約7%）。', '1回90秒・1日3回。時間切れか出口で戻る。大技は赤い予告をよける。技も使える。倒れても何も失わず、それまでのダメージは記録される。',
+    'ごほうび（日曜が終わったあと、最初に見たとき）：順位 1位 5万G・pt60・素材4／2位 3万G・pt40／3位 2万G・pt30／ほか。倒しきれたら2倍。1位は銘の武器のことも（30%、倒しきれたら60%）。'])},
   {k:'course', t:'コース料理と予約客', c:() => crsOn(), h:() => li(['解放：店の格が「伝説の宵闇亭」になると。毎朝6時に、その日の18:30〜21:00の予約が0〜2組（1〜4名、好みつき）。',
     '店内の「📖予約」で、前菜・主菜・デザートを人数ぶん選ぶ（倉庫・カバン・棚から取り分ける。外すと戻る）。時間になると来店して食べる。用意できていないと帰ってしまい評判-1。',
     '<b>食べ合わせの点数</b>（100点）：役割に合う40（前菜＝サラダ・スープ・刺身・豆腐・卵など／和える・生・蒸す、主菜＝肉・魚・煮込み・炒め・揚げ・丼・麺など、デザート＝タルト・プリン・パンケーキなど甘いもの）／食材がかぶらない15（基本の調味料は数えない）／調理法が3つちがう10／好み（魚介・肉・野菜・甘いもの・辛いもの）15／旬・品質20（旬、金色、熟練★4以上）。',
@@ -5058,7 +5065,7 @@ const MAN = [
 ];
 let manSel = 'flow';
 const MAN_CAT = [['基本', ['flow', 'ctrl', 'res', 'cook', 'wish', 'forgehut', 'shop', 'orders', 'fac', 'xfer', 'src']], ['店', ['course', 'staff', 'reg', 'critic', 'decor', 'night', 'expand', 'town', 'money', 'contest', 'cellar', 'rival', 'fame', 'kiwami', 'airec', 'stall', 'merchant']],
-  ['農・釣り', ['farm', 'soil', 'hill', 'ranch', 'mach', 'brewer', 'breed', 'fish', 'fishmk', 'forage', 'season', 'quality']], ['冒険', ['shugyo', 'mine', 'plgrow', 'scroll', 'works', 'tavern', 'monster', 'story', 'guild', 'arms', 'dungeon', 'secrets', 'abyss', 'tower']],
+  ['農・釣り', ['farm', 'soil', 'hill', 'ranch', 'mach', 'brewer', 'breed', 'fish', 'fishmk', 'forage', 'season', 'quality']], ['冒険', ['raid', 'shugyo', 'mine', 'plgrow', 'scroll', 'works', 'tavern', 'monster', 'story', 'guild', 'arms', 'dungeon', 'secrets', 'abyss', 'tower']],
   ['町・遠征', ['expedition', 'desert', 'tea', 'capital', 'isle', 'caravan', 'mirror']], ['やり込み', []]];
 const manCatOf = k => (MAN_CAT.find(c => c[1].includes(k)) || MAN_CAT[MAN_CAT.length - 1])[0];
 let manCat = '基本', manQ = '';
@@ -6057,11 +6064,12 @@ function openGuildDesk() {
   const bar = nx === null ? '<div class="p">最高ランクに到達している。</div>' : `<div class="p">次のランク${GUILD_RN[r + 1]}まで：ギルドポイント ${G.gp}/${nx}</div><div style="height:${U}px;background:#2a1e18;border-radius:3px"><div style="height:100%;width:${Math.min(100, G.gp / nx * 100)}%;background:#c8a040;border-radius:3px"></div></div>`;
   const exam = G.exam ? `<div class="p">⚔ <b>昇格試験の最中</b>：地下迷宮の<b>B${G.exam.f}より深い階</b>に、赤いオーラの試験官が現れる。倒せば合格。</div><div class="btn" data-a="cancel">試験をやめる（また受けられる）</div>`
     : canExam ? `<div class="btn big grn" data-a="exam">昇格試験を受ける（B${GUILD_EXF[r + 1]}より深い階）</div>` : '';
-  modal('ギルドの受付', `<div class="p">受付のリナ「冒険者ギルドへようこそ！ 依頼は左の掲示板からどうぞ」</div>
+  modal('ギルドの受付', `<div class="p">受付のリナ「冒険者ギルドへようこそ！ 依頼は左の掲示板からどうぞ」</div>${rdOn() ? `<div class="btn big red" data-a="raid" style="margin-bottom:${U}px">⚔ 今週の大物討伐：${RD[rdSt().k].n}${rdSt().done ? '（討伐済み）' : ''}</div>` : ''}
     <div style="font-size:${U * 6}px;text-align:center;color:#e8c050;margin:${U}px 0"><b>ランク ${GUILD_RN[r]}</b></div>${bar}${exam}
     <div class="p">達成した依頼 ${G.done || 0}件　倒した魔物 ${totalKills().toLocaleString()}体　ギルドの建物 ${guildStage()}段階目</div>
     ${unl('arms') ? '<div class="btn big blu" data-a="garms">⚔ ギルドの交換所（武器・指輪）</div>' : ''}${unl('place') ? '<div class="btn big blu" data-a="gplc" style="margin-top:calc(var(--u)*1.4)">🪑 飾りの交換所</div>' : ''}${unl('expd') ? '<div class="btn big" data-a="gsq" style="margin-top:calc(var(--u)*1.4)">🧭 遠征隊</div>' : ''}
     <div class="h">ランクごとの昇格試験</div><div class="p">${GUILD_RN.slice(1).map((n, i) => `${n}：pt${GUILD_TH[i + 1]}・B${GUILD_EXF[i + 1]}〜`).join('　')}</div>`, 'gdesk');
+  bind('[data-a=raid]', () => openRaid());
   bind('[data-a=exam]', () => { G.exam = {f:GUILD_EXF[r + 1]}; tut('g_exam'); sfx('ok'); toast(`昇格試験の開始！ 地下迷宮のB${G.exam.f}より深い階で試験官を探そう`, 4000); openGuildDesk(); });
   bind('[data-a=cancel]', () => { G.exam = null; openGuildDesk(); });
   bind('[data-a=garms]', () => openGuildArms()); bind('[data-a=gplc]', () => openPlcShop()); bind('[data-a=gsq]', () => openSquad());
@@ -7165,6 +7173,55 @@ function openCourse(sel) {
     bind('[data-cp]', d => { const [k, g] = d.cp.split('|'), gg = g === '1', o = R.set[i]; if (haveDish(k, gg) + (o && o.k === k && o.g === gg ? R.n : 0) < R.n) return; if (o) add(o.g ? S.dishG : S.dish, o.k, R.n); takeDish(k, gg, R.n); R.set[i] = {k, g:gg}; sfx('pop'); dirty = true; openCourse(); }); return; } }
   modal('予約帳', html, 'course'); bind('[data-cs]', d => openCourse(d.cs));
 }
+// ===== v0.66 週替わりの大物討伐：ギルドの冒険者と一緒に、町はずれの大物の体力を1週間かけて削る
+const RD = {rd_boar:{n:'山の主・大猪王', pat:['dash', 'ring', 'erupt'], minion:'boar', mat:'boar', say:'地ひびきとともに、山の主が柵へ突っこんできた！'},
+  rd_serpent:{n:'霧の大蛇', pat:['tent', 'ink', 'breath'], minion:'shade', mat:'eel', say:'霧の中から、白い大蛇が鎌首をもたげた。'},
+  rd_crab:{n:'鋼の大蟹', pat:['cross', 'ring', 'hail'], minion:'acrab', mat:'crab', say:'鋼の甲羅をきしませて、大蟹がはさみを振り上げた！'},
+  rd_eagle:{n:'夜空の大鷲', pat:['foxfire', 'dash', 'hail'], minion:'darkbird', mat:'dark_chicken', say:'星をまとった大鷲が、夜空から舞い降りた！'}};
+const RD_KEYS = Object.keys(RD), RD_NPC = ['重剣士ドラン', '弓使いリーネ', '魔導師オウル', '双剣のカイ', '老騎士バルト'];
+Object.assign(MONT, {rd_boar:{n:RD.rd_boar.n, hp:1, atk:40, spd:22, boss:1, drop:[]}, rd_serpent:{n:RD.rd_serpent.n, hp:1, atk:44, spd:16, boss:1, drop:[]}, rd_crab:{n:RD.rd_crab.n, hp:1, atk:48, spd:12, boss:1, drop:[]}, rd_eagle:{n:RD.rd_eagle.n, hp:1, atk:42, spd:26, boss:1, drop:[]}});
+for (const k of RD_KEYS) BOSSP[k] = {pat:RD[k].pat, minion:RD[k].minion, say:RD[k].say};
+BOSS_KEYS.push(...(D.rdboss || RD_KEYS));
+const rdOn = () => unl('raid');
+const rdScale = () => deepSc(Math.max(20, Math.floor(((S.mine && S.mine.max) || 20) * .8))) / deepSc(60);
+function rdDps() { const g = eqW(), st = wStats(), f = gearFx(); return Math.max(5, (g ? wAtkVal(g) : 3) * forgeMulS() * deepMul() * atkMulFx(f) * wmMul() / (st.cd || .5)); }
+function rdSt() { const wk = Math.floor(gday() / 7); if (!S.raid || S.raid.wk !== wk) { const old = S.raid; if (old && old.k) rdSettle(old);
+    const k = RD_KEYS[wk % RD_KEYS.length], mx = Math.round(rdDps() * 900 / 1000) * 1000; S.raid = {wk, k, max:mx, hp:mx, my:0, npc:Object.fromEntries(RD_NPC.map(n => [n, 0])), day:-1, tries:0, td:-1, done:false}; if (old) S.raid.last = old.res; } return S.raid; }
+function rdStep() { if (!rdOn()) return; const R = rdSt(), d = gday(); if (R.day !== d && hmNow() >= 360 && !R.done) { R.day = d;   // 冒険者たちが毎朝削る（合わせて最大体力の約7%）
+    for (const n of RD_NPC) { const v = Math.round(R.max * .014 * rnd(.5, 1.5)); R.npc[n] += v; R.hp -= v; } if (R.hp <= 0) { R.hp = 0; R.done = true; R.by = 'npc'; } dirty = true; } }
+function rdRank(R) { const all = [['宵闇亭（あなた）', R.my, 1], ...Object.entries(R.npc).map(([n, v]) => [n, v, 0])].sort((a, b) => b[1] - a[1]); return all; }
+function rdSettle(R) {   // 週の終わりのごほうび（日曜が終わったあと、最初に見たとき）
+  if (R.paid) return; R.paid = 1; if (!R.my) { R.res = `先週の${RD[R.k].n}討伐には参加しなかった。`; return; }
+  const all = rdRank(R), pos = all.findIndex(x => x[2]) + 1, kill = R.done ? 2 : 1, gold = [0, 50000, 30000, 20000, 12000, 8000, 6000][pos] * kill, gp = [0, 60, 40, 30, 20, 15, 10][pos] * kill, mat = RD[R.k].mat, nm = (pos <= 3 ? 4 : 2) * kill;
+  S.gold += gold; if (unl('guild')) guildState().gp += gp; add(S.inv, mat, nm); S.known.i[mat] = true; const lines = [`${fmt(gold)}G`, `ギルドポイント +${gp}`, `${ingName(mat)}×${nm}`];
+  if (pos === 1 && skOn() && Math.random() < (R.done ? .6 : .3)) { const g = twDrop(2); if (g) lines.push(`<b style="color:${RAR_C[g.r]}">${gNm(g)}</b>`); }
+  if (pos === 1) S.stat.raid1 = (S.stat.raid1 || 0) + 1; S.stat.raid = (S.stat.raid || 0) + 1;
+  R.res = `先週の${RD[R.k].n}討伐：${R.done ? '<b>討伐成功！</b>' : '倒しきれなかった'}　あなたは<b>${pos}位</b>（${fmt(R.my)}ダメージ）<br>ごほうび：${lines.join('・')}`;
+  if (!simulating) setTimeout(() => popStory(`<div class="tth">⚔ 大物討伐の結果</div><div class="ttx">${R.res}</div>`), 800); else rep_.raid = R.res.replace(/<[^>]+>/g, '');
+}
+function openRaid() {
+  if (!rdOn()) return toast('🔒 ギルドランクCになると、大物討伐に参加できる。'); tut('m_raid'); const R = rdSt(), d = gday();
+  if (R.td !== d) { R.td = d; R.tries = 0; } const all = rdRank(R), left = 6 - (gday() % 7);
+  const bar = `<div style="height:${U * 2.4}px;background:#140c08;border-radius:3px;overflow:hidden"><div style="height:100%;width:${Math.round(R.hp / R.max * 100)}%;background:#c83a3a"></div></div>`;
+  modal('今週の大物討伐', `<div style="text-align:center">${bossIcHTML(R.k, U * 22)}</div><div class="p"><b>${RD[R.k].n}</b>が町はずれに現れた！ ギルドの冒険者たちと一緒に、日曜が終わるまでに体力を削りきろう。<br>残り体力 ${fmt(Math.max(0, R.hp))}/${fmt(R.max)}${R.done ? '　<b style="color:#8ad86a">討伐成功！</b>' : `　あと${left}日`}</div>${bar}
+    <div class="h">与えたダメージの順位</div>${all.map((x, i) => `<div class="row"><div class="calev">${i + 1}位</div><div class="t"><b style="${x[2] ? 'color:#e8c050' : ''}">${x[0]}</b><span>${fmt(x[1])}</span></div></div>`).join('')}
+    <div class="p">1回90秒、1日3回まで（今日 あと${3 - R.tries}回）。倒れても何も失わない。日曜が終わると順位でごほうび（1位 5万G・ギルドpt60・${ingName(RD[R.k].mat)}、銘の武器のことも。倒しきれたら2倍）。</div>${R.last ? `<div class="p" style="color:var(--sub)">${R.last}</div>` : ''}
+    <div class="btn big ${R.tries < 3 && !R.done ? 'red' : 'dis'}" data-a="go">⚔ 討伐場へ（90秒）</div>`, 'raid');
+  bind('[data-a=go]', () => { if (R.tries >= 3 || R.done) return; R.tries++; raidStart(); });
+}
+function raidStart() {
+  closeModal(); const R = rdSt(), M = mineState(); M.hp = M.hpMax; M.st = M.stMax; M.trip = {}; M.sk = 0;
+  FL = {f:1, arena:{raid:R.k, t:0, left:90}, eqf:Math.max(1, M.max || 1), rocks:[], mons:[], ladder:null, broken:0, special:null, elevator:false, lake:null, chest:null, lava:false, blk:[], boss:true, walkFn:(x, y) => ((x - 72) / 58) ** 2 + ((y - 150) / 88) ** 2 < 1};
+  const b = mkMon(R.k, 72, 120, 1, 0), sc = rdScale(); b.boss = 1; b.hp = b.max = Math.max(1, R.hp); b.atk = Math.round(MONT[R.k].atk * sc * .35); b.h0 = b.hp; FL.mons.push(b); FL.rdb = b;
+  buildMineWalk(); go('mine', 72, 226); setTimeout(() => toast(`👑 <b>${RD[R.k].n}</b>　${RD[R.k].say}`, 3500), 500);
+}
+function raidTick(dt) { const a = FL.arena; a.left -= dt; if (a.left <= 0 || !FL.mons.includes(FL.rdb)) raidEnd(); }
+function raidEnd() {
+  const R = rdSt(), b = FL.rdb, dmg = Math.max(0, Math.round(b.h0 - Math.max(0, b.hp))), M = mineState(); R.my += dmg; R.hp -= dmg; let kill = false; if (R.hp <= 0 && !R.done) { R.hp = 0; R.done = true; R.by = 'me'; kill = true; }
+  FL = null; M.hp = M.hpMax; M.st = M.stMax; M.trip = {}; player.mining = player.target = null; go('guild', 64, 264); dirty = true;
+  const pos = rdRank(R).findIndex(x => x[2]) + 1;
+  setTimeout(() => popStory(`<div class="tth">⚔ ${kill ? '大物を倒した！' : '討伐の時間が終わった'}</div><div class="ttx">今回のダメージ <b>${fmt(dmg)}</b>（今週の合計 ${fmt(R.my)}・いま${pos}位）<br>${RD[R.k].n}の残り体力 ${fmt(R.hp)}/${fmt(R.max)}${kill ? '<br>とどめを刺した！ 日曜が終わると、全員のごほうびが2倍になる。' : ''}</div>`), 500);
+}
 // ===== v0.40: 魔物牧場・使い魔・薬草と調合
 const POTD = {}; (D.pot || []).forEach(([id, rc, d]) => POTD[id] = {rc, d});
 const POT_IDS = Object.keys(POTD);
@@ -7592,6 +7649,7 @@ function todoList() {
   const out = [], add_ = (i, t, go_) => out.push({i, t, go:go_});
   const ripe = PIDX().filter(j => ready(S.plots[j])).length; if (ripe) add_('🌾', `農場の作物が${ripe}つ実っている`, 'farm');
   const empty = PIDX().filter(j => !S.plots[j].seed).length; if (empty && unl('quality')) add_('🌱', `農場の空いた区画が${empty}つ`, 'farm');
+  if (rdOn()) { const R = rdSt(); if (!R.done && (R.td !== gday() || R.tries < 3)) add_('⚔', `大物討伐：${RD[R.k].n}（今日あと${R.td === gday() ? 3 - R.tries : 3}回・ギルドの受付）`, 'guild'); }
   if (crsOn()) { const w = crsSt().list.filter(R => R.set.some(x => !x)); if (w.length) add_('📖', `コースの予約${w.length}組：前菜・主菜・デザートをそろえる（店内の「📖予約」）`, 'interior'); }
   if (unl('stele') && typeof stSt === 'function') { const T = stSt(), n = STELE_T.filter(x => T.got[x]).length; if (n < 5) add_('🪨', `石碑の紋 ${n}/5（まだ：${STELE_T.filter(x => !T.got[x]).map(x => (TOWNC[x] || {}).n || x).join('・')}の広場）`, 'expmap'); }
   if (S.fac.cellar && S.cellar && S.cellar.slots) { const n = S.cellar.slots.filter(x => x && celDone(x)).length; if (n) add_('🍷', `地下貯蔵庫の熟成が${n}台できあがった`, 'cellar'); }
@@ -8276,7 +8334,7 @@ function buildMineWalk() {
 }
 function mineObjs() {
   if (!FL) return [];
-  if (FL.arena) return [{id:'arx', lb:'降参して闘技場を出る', r:[60, 24, 84, 44], st:[72, 52], act:() => arenaEnd(false)}];
+  if (FL.arena) return [{id:'arx', lb:FL.arena.raid ? '討伐場を出る（それまでのダメージは記録される）' : '降参して闘技場を出る', r:[60, 24, 84, 44], st:[72, 52], act:() => FL.arena.raid ? raidEnd() : arenaEnd(false)}];
   if (FL.vault) return [{id:'up', lb:'元の階へ戻る（はしご）', r:[62,30,82,44], st:[72,52], act:() => leaveSpecial()}, ...(FL.chest ? [{id:'vchest', lb:'大きな宝箱を開ける', r:[56, 104, 88, 136], st:[72, 146], act:() => vaultChest()}] : [])];
   if (FL.ak) return [{id:'up', lb:'B1へ戻る（はしご）', r:[62,30,82,44], st:[72,52], act:() => leaveSpecial()}, {id:'abook', lb:'古の料理帖', r:[50, 110, 94, 154], st:[72, 162], act:() => openAncBook()},
     {id:'ashelf', lb:'星の器の棚', r:[94, 42, 132, 84], st:[110, 92], act:() => ancShelf()}, {id:'ahearth', lb:'古の竈', r:[12, 42, 52, 82], st:[32, 92], act:() => toast(stSt().book ? '古の竈の火：料理の値打ち+5%（ずっと）' : '古いかまどに、まだ火が残っている。料理帖を読んでみよう')}];
@@ -8304,7 +8362,7 @@ function standNear(o) { const cx = o.x + 8, cy = o.y + 7; const c = [[cx, cy + 1
 function mineUpdate(dt) {
   if (scene !== 'mine' || !FL) return;
   const M = mineState();
-  if (FL.arena) { arenaTick(dt); if (!FL) return; }
+  if (FL.arena) { if (FL.arena.raid) raidTick(dt); else arenaTick(dt); if (!FL) return; }
   if (FL.v === 'mist') { M.hp -= dt * Math.max(.4, M.hpMax * .004) * (buffOn('def') ? .5 : 1) * (gearAccOn('neck_amulet') ? .5 : 1) * (buffOn('p_anti') ? 0 : 1); if (M.hp <= 0) return mineDie(); }
   if (!player.target && !padDir) { const near = FL.mons.find(m => Math.hypot(m.x - player.x, m.y - player.y) < (m.boss ? 30 : 15)); if (near) { player.resume = player.mining; player.mining = null; player.target = near; player.path = []; } }
   // mining
@@ -8421,7 +8479,7 @@ function scrollReturn(auto) {
   setTimeout(() => popStory(`<div class="tth">📜 帰還の巻物${auto ? '（自動）' : ''}</div><div class="ttx">${auto ? '倒れそうになった瞬間、巻物が光って地上へ運んでくれた。何も失っていない。<br>' : ''}${bonus.length ? '帰り道のおまけ（拾った物の2割）：' + bonus.slice(0, 8).join('・') + (bonus.length > 8 ? ' ほか' : '') + '<br>' : ''}${mk ? `<b>帰還の印</b>を残した。次は入口で「${mk}から再開」を選べる（1回だけ）。` : ''}</div>`), 500);
 }
 function mineDie() {
-  if (FL && FL.arena) return arenaEnd(false);
+  if (FL && FL.arena) return FL.arena.raid ? raidEnd() : arenaEnd(false);
   if (FL && !FL.ak && !FL.vault && haveIng('scroll') && takeIng('scroll', false, 1)) { scrollReturn(true); return; }
   const M = mineState(); if (M.revive) { M.revive = 0; M.hp = M.hpMax / 2; floatAt(player.x, player.y - 24, 'エリクサー！', 'info'); toast('✨ エリクサーの力で立ち上がった！'); return; } let lost = [];
   for (const id in M.trip) { const n = Math.floor(M.trip[id] / 2); if (n > 0) { takeIng(id, false, Math.min(n, haveIng(id))); lost.push(`${ingName(id)}×${n}`); } }
@@ -8697,7 +8755,7 @@ async function boot() {
   bootMark('はじめ');
   if (bootPrev && !bootPrev.done && Date.now() - bootPrev.t < 600000) BOOTERR.push('前回の起動が「' + bootPrev.st + '」で止まった');
   layout();
-  const ks = ['atlas','world','sil','gold','chars','charsUI','bg_interior','bg_outside','bg_farm','bg_farm2','logo','machines','workshop','rocks','bg_farm3','bg_farm4','bg_mine0','bg_mine1','bg_mine2','bg_mine3','bg_mine4','bg_mine5','bg_fpond','bg_fpier','bg_flake','tackle','bg_upstairs','stairs','bg_wilds','bg_stall','wagon','decor','bed','bg_b_river','bg_b_flower','bg_b_marsh','bg_b_volcano','bg_b_snow','bg_b_moon','bmap','gimmick','dog','rival','bg_cellar','cellarobj','trapdoor','bg_deep_deep','bg_deep_mist','bg_deep_dark','bg_deep_vein','bg_deep_den','bg_deep_garden','tower_a0','tower_a1','tower_a2','tower_a3','tower_a4','tower_ext','tower_far','tower_off','bg_port','exp_map','exp_map2','bg_desert','exp_map3','exp_map4','exp_map5','bg_tea','bg_capital','bg_isle','bg_guild1','bg_guild2','bg_guild3','bg_guild4','bg_guild5','guild_sign','cara_banner','wagons','cmark','bosses','curse_statue','bg_mranch','guild_sign2','bg_museum','bg_oldtown','bld_chapel','bld_library','bld_school','bld_theater','bld_bathhouse','bld_garden','bld_smithy','bld_gate','bg_mirror','place','bg_mfarm','bg_dg_mirror','bg_dgb_mirror','dg_gate_mirror','mgate','cportraits','steles','sealdoor','digspot','bigchest','crackwall','bg_vault','bg_ancient','moonstall','forge','stall_spr','bg_tavern','bg_arena','tv_boards','bg_hill','hill_ov2','hill_ov3','bg_tw0','bg_tw1','bg_tw2','bg_twb0','bg_twb1','bg_twb2','dg_gate_tower',...['l0','l1','l2','l3','l4','l5','deep','ship','temple','shrine','castle','volcano'].map(t => 'rocks_' + t),...['ship','temple','shrine','castle','volcano'].flatMap(k => ['bg_dg_' + k, 'bg_dgb_' + k, 'dg_gate_' + k])];
+  const ks = ['atlas','world','sil','gold','chars','charsUI','bg_interior','bg_outside','bg_farm','bg_farm2','logo','machines','workshop','rocks','bg_farm3','bg_farm4','bg_mine0','bg_mine1','bg_mine2','bg_mine3','bg_mine4','bg_mine5','bg_fpond','bg_fpier','bg_flake','tackle','bg_upstairs','stairs','bg_wilds','bg_stall','wagon','decor','bed','bg_b_river','bg_b_flower','bg_b_marsh','bg_b_volcano','bg_b_snow','bg_b_moon','bmap','gimmick','dog','rival','bg_cellar','cellarobj','trapdoor','bg_deep_deep','bg_deep_mist','bg_deep_dark','bg_deep_vein','bg_deep_den','bg_deep_garden','tower_a0','tower_a1','tower_a2','tower_a3','tower_a4','tower_ext','tower_far','tower_off','bg_port','exp_map','exp_map2','bg_desert','exp_map3','exp_map4','exp_map5','bg_tea','bg_capital','bg_isle','bg_guild1','bg_guild2','bg_guild3','bg_guild4','bg_guild5','guild_sign','cara_banner','wagons','cmark','bosses','curse_statue','bg_mranch','guild_sign2','bg_museum','bg_oldtown','bld_chapel','bld_library','bld_school','bld_theater','bld_bathhouse','bld_garden','bld_smithy','bld_gate','bg_mirror','place','bg_mfarm','bg_dg_mirror','bg_dgb_mirror','dg_gate_mirror','mgate','cportraits','steles','sealdoor','digspot','bigchest','crackwall','bg_vault','bg_ancient','moonstall','forge','stall_spr','bg_tavern','bg_arena','tv_boards','bg_hill','hill_ov2','hill_ov3','bg_tw0','bg_tw1','bg_tw2','bg_raid','bg_twb0','bg_twb1','bg_twb2','dg_gate_tower',...['l0','l1','l2','l3','l4','l5','deep','ship','temple','shrine','castle','volcano'].map(t => 'rocks_' + t),...['ship','temple','shrine','castle','volcano'].flatMap(k => ['bg_dg_' + k, 'bg_dgb_' + k, 'dg_gate_' + k])];
   introMsg('読み込み中…（画像）'); let nl = 0; await Promise.all(ks.map(k => loadImg(k, A[k]).then(() => { if (++nl % 20 === 0) introMsg(`読み込み中…（画像 ${nl}/${ks.length}）`); })));
   bootMark('画像の準備'); introMsg('読み込み中…（画像の準備）'); await new Promise(r => setTimeout(r, 20));
   for (const k of ['atlas','sil','gold','charsUI','tackle']) URL_[k] = BLOBU[k] || ('data:image/png;base64,' + A[k]);
