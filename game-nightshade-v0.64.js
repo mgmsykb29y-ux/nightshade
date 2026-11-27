@@ -771,27 +771,53 @@ function staffFish(bonus = 0) {
     return {g, w: w / (1 + haveAnyIng(g.id) / 30)}; })).g;
 }
 // v0.60 農夫の植え替えの偏りを減らす：前と同じ作物が、ほかの作物よりずっと多くあるときは、少ない作物（旬は優先）に植え替える
-function farmerPick(last) {
+function farmerPick(last, pl) {
   const cand = SEEDS.filter(g => g.src[1] > 0 && g.src[1] <= 30 && !HYBS.has(g.id) && !FANTASY.has(g.id) && (S.known.i[g.id] || g.id === last));
   if (!cand.length) return last; const grow = {}; for (const i of PIDX()) { const p = S.plots[i]; if (p.seed) grow[p.seed] = (grow[p.seed] || 0) + 1.5; }
   const sc = id => (haveAnyIng(id) + (grow[id] || 0)) / (inSeason(id) ? 1.5 : 1);
   const ss = cand.map(g => sc(g.id)).sort((a, b) => a - b), med = ss[Math.floor(ss.length / 2)];
-  if (last && (sc(last) < 20 || sc(last) < med * 1.5 + 10)) return last;
-  const low = cand.slice().sort((a, b) => sc(a.id) - sc(b.id)).slice(0, 4); return pick(low).id;
+  const so = soilOn() && pl, rotBad = so && pl.fam && cropFam(last) === pl.fam, lean = so && soilV(pl) < 35;   // v0.64 輪作：前と同じ仲間は避け、やせた畑には豆
+  if (last && !rotBad && !lean && (sc(last) < 20 || sc(last) < med * 1.5 + 10)) return last;
+  let pool = cand.filter(g => !(so && pl.fam && cropFam(g.id) === pl.fam)); if (lean) { const bn = pool.filter(g => cropFam(g.id) === 'bean'); if (bn.length) pool = bn; } if (!pool.length) pool = cand;
+  const low = pool.slice().sort((a, b) => sc(a.id) - sc(b.id)).slice(0, 4); return pick(low).id;
 }
 let farmQB = 0;
+// v0.64 畑の土と輪作：区画ごとの土の肥えぐあい（p.soil 0〜100、はじめ60）と、前に育てた作物の仲間（p.fam）
+const CROP_FAM = {leaf:['cabbage', 'spinach', 'lettuce', 'hakusai', 'komatsuna', 'shungiku', 'mizuna', 'nira', 'leek', 'celery', 'broccoli', 'cauliflower', 'asparagus', 'jadeleaf'],
+  root:['carrot', 'daikon', 'turnip', 'burdock', 'lotus', 'onion', 'garlic', 'ginger', 'blackgarlic', 'mandrake'],
+  fruit:['tomato', 'eggplant', 'pepper', 'pumpkin', 'cucumber', 'zucchini', 'paprika', 'okra', 'chili', 'melon', 'watermelon', 'strawberry', 'blueberry', 'tomaberry', 'dragonpepper', 'sunpumpkin', 'nightshade', 'abyssplum'],
+  bean:['soy', 'edamame', 'peanut'], grain:['wheat', 'rice', 'corn', 'sesame', 'starrice'], tuber:['potato', 'sweetpotato', 'satoimo', 'nagaimo', 'goldpotato'],
+  herb:['basil', 'mint', 'shiso', 'fairy_flower', 'manna'], mush:['shiitake', 'moonshroom', 'moonshiitake']};
+const FAM_N = {leaf:'葉もの', root:'根もの', fruit:'実もの', bean:'豆', grain:'穀物', tuber:'いも', herb:'香草・花', mush:'きのこ'};
+const FAM_OF = {}; for (const k in CROP_FAM) CROP_FAM[k].forEach(id => FAM_OF[id] = k);
+const cropFam = id => FAM_OF[id] || 'fruit';
+const soilOn = () => unl('quality');
+const soilV = p => p.soil == null ? 60 : p.soil;
+const soilLv = v => v >= 75 ? 3 : v >= 45 ? 2 : v >= 25 ? 1 : 0;
+const SOIL_N = ['カラカラ', 'やせた土', 'ふつうの土', '肥えた土'];
+const soilGrow = p => !soilOn() ? 1 : [.8, .92, 1, 1.12][soilLv(soilV(p))];
+function soilHarvest(p, seed) {   // 収穫のときの土の変化と、品質・量への効き目
+  if (!soilOn()) return {q:0, n:0, rot:0};
+  const fam = cropFam(seed), same = p.fam === fam, v = soilV(p);
+  const q = (v - 50) / 50 * .6 + (same ? -.4 : p.fam ? .3 : 0), n = (v >= 75 && Math.random() < .25 ? 1 : 0) + (!same && p.fam && Math.random() < .2 ? 1 : 0) - (same && v < 45 && Math.random() < .3 ? 1 : 0);
+  p.soil = Math.max(0, Math.min(100, v + (fam === 'bean' ? 15 : fam === 'herb' ? -2 : same ? -12 : -5)));
+  const rot = !same && !!p.fam; p.fam = fam; if (rot) S.stat.rot = (S.stat.rot || 0) + 1; return {q, n, rot, same};
+}
+function soilRest(dt) { if (!soilOn()) return; for (const i of PIDX()) { const p = S.plots[i]; if (!p.seed && soilV(p) < 70) p.soil = Math.min(70, soilV(p) + dt / 60 * 2); } }   // 空けておくと少しずつ戻る（1時間に+2、70まで）
 const harvestPlot = (i, toBag) => {
   const p = S.plots[i]; if (!p.seed) return null;
   const g = ING[INGI[p.seed]]; const gold = Math.random() < .05 * luckMul() * (p.fz === 'fert2' ? 3 : 1);
-  const n = 1 + (Math.random() < .35 ? 1 : 0) + (evOn('harvest') ? 1 : 0) + (brLv(p.seed) >= 3 ? 1 : 0);
-  const hq = (brLv(p.seed) >= 2 ? .4 : 0) + farmQB + 1 + ((p.w || 1) > 1 ? .5 : 0) + (p.fz ? .6 : 0) + (inSeason(p.seed) ? .7 : 0) + rnd(-.2, .3);
+  const sh = soilHarvest(p, p.seed);
+  const n = Math.max(1, 1 + (Math.random() < .35 ? 1 : 0) + (evOn('harvest') ? 1 : 0) + (brLv(p.seed) >= 3 ? 1 : 0) + sh.n);
+  const hq = (brLv(p.seed) >= 2 ? .4 : 0) + farmQB + 1 + ((p.w || 1) > 1 ? .5 : 0) + (p.fz ? .6 : 0) + (inSeason(p.seed) ? .7 : 0) + rnd(-.2, .3) + sh.q;
   withQ(hq, () => { if (toBag) { giveBag('i', p.seed, gold, gold ? 1 : n); if (gold && n > 1) giveBag('i', p.seed, false, n - 1); }
   else { add(gold ? S.invG : S.inv, p.seed, gold ? 1 : n); if (gold) add(S.inv, p.seed, n - 1); } });
   S.known.i[p.seed] = true;
   p.last = p.seed; S.stat.harvested++; legRoll(.0015, 'sennen_ninjin', '畑から、とんでもなく立派な人参が出てきた。');
   if (p.fz === 'fert3') { p.fz = 'used3'; p.g = 0; p.w = 0; }
   else { p.seed = null; p.g = 0; p.w = 0; p.fz = null; }
-  return {g, n, gold};
+  if (sh.same && soilV(p) < 45 && !S.soilWarn) { S.soilWarn = 1; tut('m_soil'); }
+  return {g, n, gold, rot:sh.rot};
 };
 function plantPlot(i, id, autoBuy) {
   const p = S.plots[i]; if (p.seed || !plotOn(i)) return false;
@@ -897,13 +923,15 @@ function step(dt, vis) {
   const gm = (evOn('spring') ? 1.3 : 1) * rsGrow(), rain = evOn('rain');
   const spN = [0, 4, 12, 24][S.fac.sprinkler || 0], spW = [0, 1.3, 1.5, 1.8][S.fac.sprinkler || 0];
   const soilM = (S.staff.farmer && perkN('farmer', 'soil') ? 1.08 : 1) * mrHelp('farm') * plcMul('farm') * medalMul('farm');
-  for (const i of PIDX()) { const p = S.plots[i]; if (p.seed) { if (rain && !p.w) p.w = 1.3; if (i < spN && (p.w || 0) < spW) p.w = spW; p.g = (p.g || 0) + dt * (p.w || 1) * gm * (p.fz === 'fert1' ? 1.3 : 1) * growSeasonMul(p.seed) * soilM * (brLv(p.seed) >= 1 ? 1.15 : 1); } }
+  soilRest(dt);
+  for (const i of PIDX()) { const p = S.plots[i]; if (p.seed) { if (rain && !p.w) p.w = 1.3; if (i < spN && (p.w || 0) < spW) p.w = spW; p.g = (p.g || 0) + dt * (p.w || 1) * gm * (p.fz === 'fert1' ? 1.3 : 1) * growSeasonMul(p.seed) * soilM * soilGrow(p) * (brLv(p.seed) >= 1 ? 1.15 : 1); } }
   if (typeof caravanStep === 'function' && S.cara) caravanStep();
   if (S.mr && typeof mrDaily === 'function' && S.mr.day !== gday()) mrDaily();
   if (typeof v45Tick === 'function') v45Tick();
   if (typeof v48Tick === 'function') v48Tick();
   if (typeof hillStep === 'function') { hillUnl(); hillStep(dt, vis); }
   if (typeof twUnl === 'function') twUnl();
+  if (soilOn() && !S.soilIntro && !simulating && (scene === 'farm' || scene === 'hill')) { S.soilIntro = 1; tut('m_soil'); }
   if (S.aucPre) aucPreStep();
   // ranch
   const hens = (S.fac.coop || 0) * 2, cows = S.fac.barn || 0;
@@ -967,7 +995,7 @@ function step(dt, vis) {
       const PI = PIDX();
       let done = false;
       for (const j of PI) { if (done) break; if (ready(S.plots[j])) { const h = harvestPlot(j); if (h && fe.p10 === 'bumper' && Math.random() < .15) add(S.inv, h.g.id, 1); if (h && fe.master && Math.random() < .3) add(S.inv, h.g.id, 1); if (h) { rep_.harvested = (rep_.harvested || 0) + h.n; if (vis && scene === plotScene(j)) floatAt(PLOTS[j].x + 6, PLOTS[j].y, h.g.name + (h.gold ? '★' : '') + ' +' + h.n, 'info'); } done = true; } }
-      staffBuying = true; { const wc = wishCrop(); for (const j of PI) { if (done) break; const p = S.plots[j]; if (p.seed) continue; if (wc && plantPlot(j, wc, S.auto.buy)) { done = true; break; } if (p.last) { const fp = farmerPick(p.last); if (plantPlot(j, fp, S.auto.buy) || (fp !== p.last && plantPlot(j, p.last, S.auto.buy))) done = true; } } } staffBuying = false;
+      staffBuying = true; { const wc = wishCrop(); for (const j of PI) { if (done) break; const p = S.plots[j]; if (p.seed) continue; if (wc && plantPlot(j, wc, S.auto.buy)) { done = true; break; } if (p.last) { const fp = farmerPick(p.last, p); if (plantPlot(j, fp, S.auto.buy) || (fp !== p.last && plantPlot(j, p.last, S.auto.buy))) done = true; } } } staffBuying = false;
       for (const j of PI) { if (done) break; const p = S.plots[j]; if (p.seed && !ready(p) && !p.w) { p.w = 1.3; done = true; } }
     }
   }
@@ -1119,7 +1147,12 @@ function updCam(snap) {
   camY = snap ? tgt : camY + (tgt - camY) * .12;
 }
 function drawPlotCrop(i) { const p = PLOTS[i];
-      const s = S.plots[i]; if (!s.seed) return;
+      const s = S.plots[i];
+      if (soilOn()) { const lv = soilLv(soilV(s));   // 土の色：肥えた土は黒く湿って、やせた土は白っぽくひび割れる
+        if (lv === 3) { ctx.fillStyle = 'rgba(8,4,2,.38)'; ctx.fillRect(p.x, p.y, p.w, p.h); ctx.fillStyle = '#4a6a2a'; ctx.fillRect(p.x + 2, p.y + p.h - 2, 1, 1); ctx.fillRect(p.x + p.w - 3, p.y + 3, 1, 1); }
+        else if (lv <= 1) { ctx.fillStyle = lv === 0 ? 'rgba(215,185,135,.42)' : 'rgba(205,175,125,.24)'; ctx.fillRect(p.x, p.y, p.w, p.h);
+          if (lv === 0) { ctx.fillStyle = 'rgba(60,40,20,.7)'; ctx.fillRect(p.x + 3, p.y + 4, 3, 1); ctx.fillRect(p.x + 5, p.y + 5, 1, 2); ctx.fillRect(p.x + 7, p.y + 9, 3, 1); } } }
+      if (!s.seed) return;
       const g = ING[INGI[s.seed]], pr = Math.min(1, (s.g || 0) / g.src[2]);
       if (s.w && pr < 1) { ctx.fillStyle = 'rgba(20,30,60,.45)'; ctx.fillRect(p.x, p.y, p.w, p.h); ctx.fillStyle = '#6a9ad8'; ctx.fillRect(p.x + 1, p.y + 1, 1, 1); }
       if (s.fz && s.fz !== 'used3') { ctx.fillStyle = {fert1:'#8a6a3a', fert2:'#e8b858', fert3:'#9ad0e8'}[s.fz]; ctx.fillRect(p.x + p.w - 2, p.y + 1, 1, 1); ctx.fillRect(p.x + p.w - 3, p.y + 2, 1, 1); }
@@ -1422,7 +1455,8 @@ function treeLabel(i) { const t = S.trees[i]; if (!treeOn(i)) return i < 4 ? '�
 function plotLabel(i) {
   if (!plotOn(i)) return i < 24 ? '🔒 畑の区画（施設で開放）' : '🔒 丘の農地（土地を買うと使える）';
   const p = S.plots[i], h = heldItem();
-  if (!p.seed) return h && h.t === 'seed' ? `${ingLabel(h.id)}の種を植える` : h && h.t === 'tool' && toolOf(h).kind === 'hoe' ? 'クワでまとめて植える' : '種を植える';
+  const sl = soilOn() ? `（${SOIL_N[soilLv(soilV(p))]}${p.fam ? '・前は' + FAM_N[p.fam] : ''}）` : '';
+  if (!p.seed) return (h && h.t === 'seed' ? `${ingLabel(h.id)}の種を植える${soilOn() && p.fam && cropFam(h.id) === p.fam ? '⚠連作' : ''}` : h && h.t === 'tool' && toolOf(h).kind === 'hoe' ? 'クワでまとめて植える' : '種を植える') + sl;
   if (ready(p)) return h && h.t === 'tool' && toolOf(h).kind === 'sickle' ? '鎌でまとめて収穫' : `${ingLabel(p.seed)}を収穫する`;
   if (h && h.t === 'ing' && FERTS.has(h.id) && !p.fz) return `${ingName(h.id)}をまく`;
   if (h && h.t === 'tool' && toolOf(h).kind === 'can' && !p.w) return '水をやる';
@@ -1599,7 +1633,7 @@ function tapPlot(i) {
   }
   if (h && h.t === 'ing' && FERTS.has(h.id) && p.seed && !ready(p)) {
     if (p.fz) return toast('この区画にはもう肥料をまいてある。');
-    p.fz = h.id; takeIng(h.id, false, 1); syncBag(); sfx('pop'); floatAt(PLOTS[i].x + 6, PLOTS[i].y, ingName(h.id), 'info'); return;
+    p.fz = h.id; if (soilOn()) p.soil = Math.min(100, soilV(p) + 15); takeIng(h.id, false, 1); syncBag(); sfx('pop'); floatAt(PLOTS[i].x + 6, PLOTS[i].y, ingName(h.id), 'info'); return;
   }
   if (ready(p)) { const r = harvestPlot(i, true); sfx('pop'); floatAt(PLOTS[i].x + 6, PLOTS[i].y, `${r.g.name}${r.gold ? '★金色' : ''} +${r.n}`, r.gold ? '' : 'info'); if (r.gold) toast(`<b>金色の${r.g.name}</b>が採れた！ 料理に使うと3倍の値で売れる。`); syncHot(); dirty = true; return; }
   if (!p.seed && h && h.t === 'tool' && toolOf(h).kind === 'hoe') {
@@ -2139,7 +2173,9 @@ function openCompost() {
   let html = `<div class="p">余った作物や創作料理を入れると肥料になる。ためたポイント <b>${S.compostPt}</b>／4ごとに肥料1つ。金色の食材は高級肥料、幻想の作物は月光の灰になる。肥料は持ち物で選んで、育っている区画をタップしてまく。</div>`;
   html += cre.map(x => `<div class="row">${dishIcHTML(x.k, U * 10, x.g)}<div class="t"><b>${dishInfo(x.k).name}</b><span>×${x.n}　1つで2ポイント</span></div><div class="btn" data-d="${x.k}">入れる</div></div>`).join('');
   html += cand.map(x => `<div class="row">${ingIc(x.id, U * 10, x.g)}<div class="t"><b>${x.g ? '金色の' : ''}${ingName(x.id)}</b><span>×${x.n}　${x.g ? '→高級肥料' : FANTASY.has(x.id) ? '→月光の灰' : '1ポイント'}</span></div><div class="btn" data-i="${x.id}" data-g="${x.g ? 1 : 0}">入れる</div></div>`).join('') || '<div class="p">入れられる物がない。</div>';
+  if (soilOn()) html = `<div class="btn ${S.compostPt >= 2 ? 'grn' : 'dis'}" data-a="soil" style="margin-bottom:${U}px">🟫 たい肥を畑にすき込む（2ポイント → 全部の区画の土+8）</div>` + html;
   modal('たい肥箱', html, 'compost');
+  bind('[data-a=soil]', () => { if (S.compostPt < 2) return; S.compostPt -= 2; for (const i of PIDX()) { const p = S.plots[i]; p.soil = Math.min(100, soilV(p) + 8); } sfx('ok'); toast('🟫 畑全体にたい肥をすき込んだ（土+8）'); dirty = true; openCompost(); });
   const out = (id) => { giveBag('i', id, false, 1); toast(`${ingName(id)}ができた！（持ち物かカバンへ）`, 1500); };
   bind('[data-d]', d => { if (!takeDish(d.d, false, 1)) return; S.compostPt += 2; while (S.compostPt >= 4) { S.compostPt -= 4; out('fert1'); } sfx('pop'); openCompost(); });
   bind('[data-i]', d => { const g = d.g === '1'; if (!takeIng(d.i, g, 1)) return; if (g) out('fert2'); else if (FANTASY.has(d.i)) out('fert3'); else { S.compostPt += 1; while (S.compostPt >= 4) { S.compostPt -= 4; out('fert1'); } } sfx('pop'); openCompost(); });
@@ -2872,6 +2908,7 @@ const TUT = {
   m_tower:['霊峰の修練の塔', '古井戸（地下迷宮の入口）の「🗼霊峰の修練の塔へ」から行ける。全30階＋頂。どの階も敵を全部倒すと階段が出る。10階・20階・頂に<b>階の主</b>。<br><b>鎧</b>（青いゲージ）を着た敵は<b>技でしか鎧を割れない</b>。盾持ちはふつうの攻撃を7割防ぐ。<br>階を制すると<b>修練の証</b>。証は覚醒と、好きな<b>銘の武器</b>との交換に使う。'],
   m_skill:['技', '攻撃を当てる（または攻撃を受ける）と、足元のゲージがたまる。満タンになったら、画面上の<b>「⚔技！」</b>を押そう。<br>技は武器の種類で決まる（剣＝回転斬り、短剣＝連撃、槍＝突進突き、槌・斧＝大地割り、弓＝矢の雨、杖＝魔法陣、包丁＝解体、鎌＝大旋風、鞭＝縛り打ち）。<b>銘の武器</b>は技に追加効果がのる。'],
   m_wgrow:['武器の成長と覚醒', '装備している武器は、魔物を倒すと経験がたまり<b>Lv</b>が上がる（Lvごとに攻撃+2%、Lv20まで）。<br>Lv20の<b>銘・伝説・ボスの武器</b>は、鍛冶屋の工房で<b>覚醒</b>できる（攻撃×1.2・技1.5倍・付与の枠+1、名前に「真・」）。覚醒のあとも、使うほど上限なしで+1%ずつ強くなる。'],
+  m_soil:['畑の土と輪作', '畑の区画には<b>土の肥えぐあい</b>がある（区画の色：黒っぽい＝肥えた土、白っぽい＝やせた土、ひび＝カラカラ）。<br>同じ仲間の作物（葉もの・根もの・実もの・豆・穀物・いも・香草・きのこ）を続けて育てると<b>連作</b>で土がやせ、品質も下がる。<b>ちがう仲間</b>を順に育てる（輪作）と品質と量が上がる。<br><b>豆</b>（大豆・枝豆・落花生）は土を肥やす。肥料をまく・たい肥をすき込む・区画を空けて休ませても戻る。'],
   m_hill:['丘の農地', '裏の農場のいちばん下から行ける、奥の丘。下の<b>立て札</b>で土地を買う（1区→2区→3区の順）。<br>1区ごとに<b>畑8区画・果樹4本</b>が増える。畑の扱い（種・水やり・道具・農夫）は裏の農場と同じ。<br>植えた苗木は、木をタップして<b>「抜く」</b>と植え替えられる（苗木代の半分が戻る）。'],
   m_hillsp:['特別な畑と動物', '<b>特別な畑</b>（2区：棚田・茶畑、3区：ぶどう棚・きのこの原木）は一度建てると、種なしで育ち続ける。収穫は2回分までためておけて、農夫がいると自動で収穫。<br><b>動物</b>（1区）：羊＝羊乳、ヤギ＝ヤギ乳、豚＝トリュフやきのこを掘る、アヒル＝卵。小屋を建てると2頭、増築で4頭。えさはいらない。<br>羊乳・ヤギ乳は<b>乳製品台</b>で、茶葉ともち米は<b>石臼</b>で加工できる。'],
   sc_hill:['丘の農地', '下の立て札で土地を買う。草むらの区画は、まだ買っていない土地。'],
@@ -4799,6 +4836,11 @@ const MAN = [
     '<b>武器の成長</b>：装備中の武器で倒すと経験（ふつう1＋深さ/25、ボス40）。次のLvまで 20＋10×Lv。Lvごとに攻撃+2%（Lv20で+38%）。',
     '<b>覚醒</b>（銘・伝説・ボスの武器、Lv20）：工房で 奈落晶×5・修練の証×10・50,000G。攻撃×1.2・技1.5倍・付与の枠+1、名前に「真・」と光る絵。覚醒のあとは 300＋20×覚醒Lv の経験ごとに+1%（上限なし）。',
     '<b>修練の塔</b>：全30階＋頂（31階）。魔物の強さは、あなたの深層の最深記録の85%の深さに合わせて決まる（B60より浅い記録ならB60相当）。魔物は小鬼（大群れ）・盾持ちの石兵（ふつうの攻撃を7割防ぐ。ひるんでいる間は防げない）・鎧武者（鎧）・修行僧の亡霊・山の鷹。10階＝石の門番ゴーレム、20階＝鎧の大将、頂＝天狗の大師範（どれも鎧つき）。階を初めて制すると証+3（2回目から+1）、階の主は証+10（頂+20）と賞金と銘の武器。11階・21階から登れる。呪いもかけられる。'])},
+  {k:'soil', t:'畑の土と輪作', c:() => soilOn(), h:() => li(['区画ごとに<b>土</b>（0〜100、はじめ60）。肥えた土（75〜）＝育ち+12%・品質+0.3〜0.6・25%で収穫+1／ふつう（45〜）／やせた土（25〜）＝育ち-8%・品質が下がる／カラカラ（〜24）＝育ち-20%。区画の色でわかる。',
+    '収穫するたびに土が減る（ふつう-5）。<b>前と同じ仲間</b>を続けると<b>連作</b>：土-12・品質-0.4（やせた土なら30%で収穫-1）。<b>ちがう仲間</b>（輪作）：品質+0.3・20%で収穫+1。',
+    '仲間：' + Object.entries(CROP_FAM).map(([k, a]) => `${FAM_N[k]}＝${a.slice(0, 5).map(ingName).join('・')}${a.length > 5 ? 'など' : ''}`).join('／'),
+    '<b>豆</b>（大豆・枝豆・落花生）は収穫で土+15。香草は-2。肥料をまくと+15、たい肥箱で「たい肥を畑にすき込む」＝2ポイントで全区画+8、空いた区画は1時間に+2（70まで）。',
+    '区画を調べると「肥えた土・前は葉もの」のように出る。連作になる種を持っていると⚠。農夫は前と同じ仲間を避け、やせた区画には豆を植える。'])},
   {k:'hill', t:'丘の農地', c:() => unl('hill'), h:() => li(['店の格が「評判の店」になると、裏の農場のいちばん下の道から行ける。', '<b>土地</b>：1区 8,000G → 2区 20,000G → 3区 45,000G（下から順に）。1区ごとに畑8区画・果樹4本。', '<b>特別な畑</b>：棚田（米20個/10分・もち米12個/10分）・茶畑（茶葉12個/10分）は2区、ぶどう棚（ぶどう10個/15分）・きのこの原木（しいたけ・まいたけ・しめじ・えのき）は3区。種いらず、収穫2回分までたまる。雨の日は少し早い。農夫が自動で収穫。', '<b>動物</b>（1区）：羊（羊乳）・ヤギ（ヤギ乳）・豚（トリュフ25%、ほかはきのこ）・アヒル（卵）。小屋で2頭、増築で4頭。えさはいらない。', '<b>加工</b>：乳製品台＝ヤギ乳→ヨーグルト・チーズ、羊乳→クリームチーズ・チーズ。石臼＝茶葉3→抹茶、もち米2→餅5。', '<b>苗木を抜く</b>：果樹をタップ→「苗木を抜く」（2回押し）。苗木代の半分が戻る。果樹園の看板・丘の立て札の「丘の果樹」一覧からも抜ける。'])},
   {k:'tavern', t:'冒険者の酒場', c:() => unl('tavern'), h:() => li(['ギルドの建物の扉から入る。', '<b>カウンター</b>：冒険者の注文が毎朝3件（倒した魔物の素材の料理・行った町の料理も頼まれる）。届けると値打ち×2.2のお金とギルドポイント。', '<b>訓練所</b>（ランクE）：武器の種類ごとの熟練度。その種類の武器で倒すと+1（ボス+15）、Lvごとにその種類の攻撃+2%（最大Lv20）。稽古（300G×次のLv、+15）は1日3回。', '<b>鑑定屋</b>（ランクD）：開いた後に迷宮で拾う希少以上の武器は未鑑定（ランダムな効果がはたらかない）。鑑定は400G×(レア度+1)²、15%で効果が1つ増える。', '<b>闘技場</b>（ランクC）：勝ち抜き（5連戦・10連戦・無限、1日5回）。体力は持ち越しで波の合間に15%回復、倒れても何も失わない。勝った波の数だけメダル（5連戦の完走+5、10連戦+15）とお金、週の最高記録5・10・20・30波でごほうび。倒したボスの強化版（1.5倍）と1日1回ずつ再戦、勝つとメダル12とボスの素材×2。', '<b>メダルの交換所</b>：帰還の巻物・エリクサー・上級回復薬・宝石の袋・訓練の書・英雄の武器。'])},
   {k:'works', t:'武器の工房', c:() => gearSt().list.some(g => !isAcc(g)), h:() => li(['鍛冶屋の「🔨 工房」（武器を1つ持つと出る）。', '<b>鍛え上げ</b>：鍛冶屋で作った武器を、次の素材（銅→鉄→金→…→奈落晶）の同じ型へ。効果・付与・レア度はそのまま。鉱石は作る時の6割、お金は約半分。', '<b>合成</b>：同じ武器2本で、レア度が1つ上がる（並→良→希少→英雄→伝説）。効果と付与の枠も増える。2本目の付与の宝石は返ってくる。', '<b>効果の振り直し</b>：ランダムな効果のついた武器を初めて手に入れると使える。効果を1つ選んで引き直す（3,000G×レア度＋鉱石2個か石炭4個）。', '<b>分解</b>：装備していない武器を鉱石・石炭・付与した宝石に戻す。', '<b>ガルドの依頼</b>：週に1回。今まで掘った一番いい鉱石・石炭・お金を納めると、好きな種類の「ガルド銘」の武器（英雄・効果3つ・攻撃+10%、ここでしか手に入らない）。'])},
@@ -5006,7 +5048,7 @@ const MAN = [
 ];
 let manSel = 'flow';
 const MAN_CAT = [['基本', ['flow', 'ctrl', 'res', 'cook', 'wish', 'forgehut', 'shop', 'orders', 'fac', 'xfer', 'src']], ['店', ['staff', 'reg', 'critic', 'decor', 'night', 'expand', 'town', 'money', 'contest', 'cellar', 'rival', 'fame', 'kiwami', 'airec', 'stall', 'merchant']],
-  ['農・釣り', ['farm', 'hill', 'ranch', 'mach', 'brewer', 'breed', 'fish', 'fishmk', 'forage', 'season', 'quality']], ['冒険', ['shugyo', 'mine', 'plgrow', 'scroll', 'works', 'tavern', 'monster', 'story', 'guild', 'arms', 'dungeon', 'secrets', 'abyss', 'tower']],
+  ['農・釣り', ['farm', 'soil', 'hill', 'ranch', 'mach', 'brewer', 'breed', 'fish', 'fishmk', 'forage', 'season', 'quality']], ['冒険', ['shugyo', 'mine', 'plgrow', 'scroll', 'works', 'tavern', 'monster', 'story', 'guild', 'arms', 'dungeon', 'secrets', 'abyss', 'tower']],
   ['町・遠征', ['expedition', 'desert', 'tea', 'capital', 'isle', 'caravan', 'mirror']], ['やり込み', []]];
 const manCatOf = k => (MAN_CAT.find(c => c[1].includes(k)) || MAN_CAT[MAN_CAT.length - 1])[0];
 let manCat = '基本', manQ = '';
