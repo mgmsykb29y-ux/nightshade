@@ -5,7 +5,7 @@ const ING = D.ings, REC = D.recipes, COLS = D.cols;
 const INGI = {}; ING.forEach((g, i) => { INGI[g.id] = i; g.taste = D.taste[g.id] || [0,0,0,0,0]; });
 const METHODS = ['焼く','煮る','揚げる','蒸す','生','炊く','炒める','和える'];
 const MSUF = {'焼く':'焼き','煮る':'煮込み','揚げる':'揚げ','蒸す':'蒸し','生':'和え','炊く':'炊き込み','炒める':'炒め','和える':'和え物'};
-const RKEY = {}; REC.forEach((r, i) => { r.key = r.method + '|' + [...r.ings].sort().join(','); RKEY[r.key] = i;
+const RKEY = {}; REC.forEach((r, i) => { r.key = r.method + '|' + [...r.ings].sort().join(','); if (!r.wc) RKEY[r.key] = i;
   r.value = Math.round(r.ings.reduce((s, id) => s + ING[INGI[id]].value, 0) * 1.8 + 10); });
 const FANTASY = new Set(['mandrake','nightshade','moonshroom','fairy_flower','manna']);
 const TOOLS = D.tools, TOOLI = {}; TOOLS.forEach(t => TOOLI[t.id] = t);
@@ -183,6 +183,7 @@ const UNL = {
   secret:{n:'迷宮の隠し部屋', i:'🧱', d:'迷宮やダンジョンの階に、ひび割れた壁が現れるようになった。崩すと昔の冒険者の隠し部屋がある。', tut:'secret'},
   moon:{n:'満月の夜', i:'🌕', d:'毎週木曜の夜は満月。広場に月の兎の夜店が出て、迷宮には月光スライムが現れ、魔物がなつきやすくなる。', tut:'moon'},
   stele:{n:'石碑と封印の扉', i:'🪨', d:'5つの町の広場に、古い石碑が見えるようになった。紋を集めると、地下迷宮B1の封印の扉が開く。', tut:'stele'},
+  wcup:{n:'世界料理大会', i:'🏆', d:'5つの町に名が知れわたり、<b>世界料理大会</b>への招待が届くようになった。季節の終わりの月（2・5・8・11月）の最後の金〜日曜に開かれる。', tut:'m_wcup'},
   raid:{n:'週替わりの大物討伐', i:'⚔', d:'ギルドランクCになり、<b>大物討伐</b>に参加できるようになった。ギルドの受付から、町はずれの大物にいどもう。', tut:'m_raid'},
   course:{n:'コース料理と予約客', i:'📖', d:'店の格が「伝説の宵闇亭」になり、<b>コースの予約</b>が入るようになった。店内の「📖予約」で、前菜・主菜・デザートをそろえよう。', tut:'m_course'},
   shugyo:{n:'霊峰の修練の塔・技・武器の成長', i:'🗼', d:'奈落の深層B60にたどり着き、古井戸の奥の転移の石から「霊峰の修練の塔」へ行けるようになった。武器の<b>技</b>（ゲージ）と<b>武器の成長・覚醒</b>、<b>銘の武器</b>（12系列）も始まる。', tut:'m_tower'},
@@ -936,6 +937,8 @@ function step(dt, vis) {
   if (!unl('course') && rankIdx() >= 4) unlockFeature('course');
   if (!unl('raid') && unl('guild') && guildState().rank >= 3) unlockFeature('raid');
   if (typeof rdStep === 'function') rdStep();
+  if (!unl('wcup') && typeof expLv === 'function' && unl('isle') && expLv('isle') >= 3) unlockFeature('wcup');
+  if (typeof wcStep === 'function') { if (!wcStep.reg) { wcStep.reg = 1; WC_RI.forEach(i => { if (S.known.r[i] || S.learned[i]) RKEY[REC[i].key] = i; }); } wcStep(); }
   if (typeof crsStep === 'function') crsStep();
   if (soilOn() && !S.soilIntro && !simulating && (scene === 'farm' || scene === 'hill')) { S.soilIntro = 1; tut('m_soil'); }
   if (S.aucPre) aucPreStep();
@@ -1348,6 +1351,7 @@ function hud() {
 const fmtLeft = sec => { sec = Math.max(0, sec); const m = Math.floor(sec / 60); return m >= 60 ? Math.floor(m / 60) + '時間' + (m % 60) + '分' : m + '分'; };
 function chips() {
   let h = `<div class="chip" data-c="idle">💤放置</div>`;
+  if (wcOn() && scene !== 'mine') { const c = wcCur(), W = wcSt(); if (c && !W.out && W.st === c.s && !W.sub[c.s]) h += `<div class="chip red" data-c="wcup">🏆大会</div>`; }
   if (scene !== 'mine') { const n = todoList().length; h += `<div class="chip ${n ? 'grn' : ''}" data-c="todo">📋${n || ''}</div>`; }
   if (scene === 'interior') {
     if (crsOn()) { const c = crsSt().list, w = c.filter(R => R.set.some(x => !x)).length; h += `<div class="chip ${w ? 'red' : c.length ? 'grn' : 'off'}" data-c="course">📖予約${c.length ? c.length : ''}</div>`; }
@@ -1406,6 +1410,7 @@ function chipAct(c) {
   else if (c === 'moon') { if (takeIng('moon_extract', false, 1)) { S.luck3T = S.t + 1800; sfx('ok'); syncBag(); toast('✨ 月光エキスを使った。30分間、金色の食材がとても出やすい。', 3500); } }
   else if (c === 'skill') { useSkill(); }
   else if (c === 'course') { openCourse(); }
+  else if (c === 'wcup') { openWC(); }
   else if (c === 'scroll') { if (takeIng('scroll', false, 1)) { closeModal(); scrollReturn(); } }
   dirty = true; chips();
 }
@@ -1826,6 +1831,7 @@ function nearRecipe(method, ids) {
 // ---------- calendar (暦)
 function dayEvents(d) {
   const Y = ymd(d), m = Y.m, dim = wdOf(d), out = [], today = gday();
+  if (unl('wcup') && wcStage(d)) out.push({i:'🏆', t:'世界料理大会：' + ['', '予選', '本選', '決勝'][wcStage(d)], s:'雪の王都の大広間で。画面上の「🏆大会」から料理を出す'});
   if (unl('season') && dim >= 5) out.push({i:'🎐', t:'行事：' + EVENTS[m].n, s:EVENTS[m].d});
   if (unl('rival') && S.rival && !S.rival.ally && dim === 7 && Math.floor(d / 7) >= S.rival.open) out.push({i:'☀', t:'白昼亭との売上勝負：結果発表', s:'この日が終わると、今週の売上で勝ち負けが決まる'});
   if (unl('moon') && dim === 4) out.push({i:'🌕', t:'満月の夜', s:'19時〜朝5時。広場に月の兎の夜店。迷宮に月光スライム。魔物がなつきやすい'});
@@ -2916,6 +2922,7 @@ const TUT = {
   m_tower:['霊峰の修練の塔', '古井戸（地下迷宮の入口）の「🗼霊峰の修練の塔へ」から行ける。全30階＋頂。どの階も敵を全部倒すと階段が出る。10階・20階・頂に<b>階の主</b>。<br><b>鎧</b>（青いゲージ）を着た敵は<b>技でしか鎧を割れない</b>。盾持ちはふつうの攻撃を7割防ぐ。<br>階を制すると<b>修練の証</b>。証は覚醒と、好きな<b>銘の武器</b>との交換に使う。'],
   m_skill:['技', '攻撃を当てる（または攻撃を受ける）と、足元のゲージがたまる。満タンになったら、画面上の<b>「⚔技！」</b>を押そう。<br>技は武器の種類で決まる（剣＝回転斬り、短剣＝連撃、槍＝突進突き、槌・斧＝大地割り、弓＝矢の雨、杖＝魔法陣、包丁＝解体、鎌＝大旋風、鞭＝縛り打ち）。<b>銘の武器</b>は技に追加効果がのる。'],
   m_wgrow:['武器の成長と覚醒', '装備している武器は、魔物を倒すと経験がたまり<b>Lv</b>が上がる（Lvごとに攻撃+2%、Lv20まで）。<br>Lv20の<b>銘・伝説・ボスの武器</b>は、鍛冶屋の工房で<b>覚醒</b>できる（攻撃×1.2・技1.5倍・付与の枠+1、名前に「真・」）。覚醒のあとも、使うほど上限なしで+1%ずつ強くなる。'],
+  m_wcup:['世界料理大会', '季節の終わりの月（2・5・8・11月）の最後の金〜日曜、雪の王都の大広間で開かれる（暦に載る）。どこにいても画面上の<b>「🏆大会」</b>から出られる。<br>金＝<b>予選</b>（お題に合う1品）→ 土＝<b>本選</b>（審査員3人に2品）→ 日＝<b>決勝</b>（ライバルとコース3品）。その日のうちに出さないと、そこで終わり。<br>優勝すると賞金・名声と、季節ごとの<b>限定レシピ</b>。'],
   m_raid:['週替わりの大物討伐', '毎週月曜、町はずれに<b>大物</b>が現れる（毎週入れかわり）。ギルドの冒険者たちと一緒に、日曜が終わるまでに体力を削りきろう。<br>ギルドの受付の「⚔ 大物討伐」から、<b>1回90秒</b>（1日3回）戦える。与えたダメージは記録され、倒れても何も失わない。<br>日曜が終わると<b>ダメージの順位</b>でごほうび。倒しきれたら2倍。'],
   m_course:['コース料理と予約客', '毎朝6時に、その日の夜（18:30〜21:00）の<b>コースの予約</b>が0〜2組入る。店内の画面上の<b>「📖予約」</b>で、倉庫の料理から<b>前菜・主菜・デザート</b>を人数ぶん選んでおこう。<br>時間になるとお客さんが来て食べる。<b>食べ合わせの点数</b>（役割に合う・食材がかぶらない・調理法がばらばら・好み・旬と品質）で、お代が最大2.5倍になる。用意できないと評判-1。'],
   m_soil:['畑の土と輪作', '畑の区画には<b>土の肥えぐあい</b>がある（区画の色：黒っぽい＝肥えた土、白っぽい＝やせた土、ひび＝カラカラ）。<br>同じ仲間の作物（葉もの・根もの・実もの・豆・穀物・いも・香草・きのこ）を続けて育てると<b>連作</b>で土がやせ、品質も下がる。<b>ちがう仲間</b>を順に育てる（輪作）と品質と量が上がる。<br><b>豆</b>（大豆・枝豆・落花生）は土を肥やす。肥料をまく・たい肥をすき込む・区画を空けて休ませても戻る。'],
@@ -4846,6 +4853,12 @@ const MAN = [
     '<b>武器の成長</b>：装備中の武器で倒すと経験（ふつう1＋深さ/25、ボス40）。次のLvまで 20＋10×Lv。Lvごとに攻撃+2%（Lv20で+38%）。',
     '<b>覚醒</b>（銘・伝説・ボスの武器、Lv20）：工房で 奈落晶×5・修練の証×10・50,000G。攻撃×1.2・技1.5倍・付与の枠+1、名前に「真・」と光る絵。覚醒のあとは 300＋20×覚醒Lv の経験ごとに+1%（上限なし）。',
     '<b>修練の塔</b>：全30階＋頂（31階）。魔物の強さは、あなたの深層の最深記録の85%の深さに合わせて決まる（B60より浅い記録ならB60相当）。魔物は小鬼（大群れ）・盾持ちの石兵（ふつうの攻撃を7割防ぐ。ひるんでいる間は防げない）・鎧武者（鎧）・修行僧の亡霊・山の鷹。10階＝石の門番ゴーレム、20階＝鎧の大将、頂＝天狗の大師範（どれも鎧つき）。階を初めて制すると証+3（2回目から+1）、階の主は証+10（頂+20）と賞金と銘の武器。11階・21階から登れる。呪いもかけられる。'])},
+  {k:'wcup', t:'世界料理大会', c:() => wcOn(), h:() => li(['解放：南の果実島ルルアの評判Lv3。季節の終わりの月（2・5・8・11月）の最後の金・土・日。画面上の「🏆大会」・やること・暦。',
+    'お題（毎回かわる）：' + WC_TH.map(t => t.n).join('・') + '。点数の「値打ち」は、あなたの知っているレシピの上位20品の平均を基準に比べる。',
+    '<b>予選</b>（金）：1品。値打ち〜60＋お題25＋品質（金色10・熟練★4以上5・旬5）。16人中8人が本選へ。',
+    '<b>本選</b>（土）：2品。王宮料理長（値打ち・金色）・美食家（旬・まだ10回未満しか作っていない料理・金色）・魔女ミラ（魔物料理・夜の食材や香辛料）の平均。8人中2人が決勝へ。',
+    '<b>決勝</b>（日）：前菜・主菜・デザート。食べ合わせ（コース料理と同じ、好み＝お題）×0.6＋値打ち〜40（3品の平均が基準の7割で30）。相手は優勝のたびに強くなる。',
+    '優勝：賞金・名声（次のLvまでの半分）・その季節の<b>限定レシピ</b>（春＝王都杯 桜鯛と筍の柚子蒸し／夏＝伊勢エビとマンゴーの炭火焼き／秋＝松茸と鴨のロースト 栗添え／冬＝鹿肉とポルチーニのブランデー煮。値打ち3倍、大会でしか覚えられない）。準優勝・本選敗退にも賞金。初優勝で称号「世界一の料理人」。'])},
   {k:'raid', t:'週替わりの大物討伐', c:() => rdOn(), h:() => li(['解放：ギルドランクC。ギルドの受付に「⚔ 今週の大物討伐」。', '大物（4体が週ごとに入れかわり）：' + RD_KEYS.map(k => RD[k].n).join('・') + '。体力はその週の初めに、あなたの攻撃力（1秒あたりのダメージ×900秒ぶん）で決まる。攻撃の強さは最深記録の8割の深さの魔物ぐらい。',
     'ギルドの冒険者5人（' + RD_NPC.join('・') + '）が毎朝6時に少しずつ削る（合わせて最大体力の約7%）。', '1回90秒・1日3回。時間切れか出口で戻る。大技は赤い予告をよける。技も使える。倒れても何も失わず、それまでのダメージは記録される。',
     'ごほうび（日曜が終わったあと、最初に見たとき）：順位 1位 5万G・pt60・素材4／2位 3万G・pt40／3位 2万G・pt30／ほか。倒しきれたら2倍。1位は銘の武器のことも（30%、倒しきれたら60%）。'])},
@@ -5064,7 +5077,7 @@ const MAN = [
   }},
 ];
 let manSel = 'flow';
-const MAN_CAT = [['基本', ['flow', 'ctrl', 'res', 'cook', 'wish', 'forgehut', 'shop', 'orders', 'fac', 'xfer', 'src']], ['店', ['course', 'staff', 'reg', 'critic', 'decor', 'night', 'expand', 'town', 'money', 'contest', 'cellar', 'rival', 'fame', 'kiwami', 'airec', 'stall', 'merchant']],
+const MAN_CAT = [['基本', ['flow', 'ctrl', 'res', 'cook', 'wish', 'forgehut', 'shop', 'orders', 'fac', 'xfer', 'src']], ['店', ['wcup', 'course', 'staff', 'reg', 'critic', 'decor', 'night', 'expand', 'town', 'money', 'contest', 'cellar', 'rival', 'fame', 'kiwami', 'airec', 'stall', 'merchant']],
   ['農・釣り', ['farm', 'soil', 'hill', 'ranch', 'mach', 'brewer', 'breed', 'fish', 'fishmk', 'forage', 'season', 'quality']], ['冒険', ['raid', 'shugyo', 'mine', 'plgrow', 'scroll', 'works', 'tavern', 'monster', 'story', 'guild', 'arms', 'dungeon', 'secrets', 'abyss', 'tower']],
   ['町・遠征', ['expedition', 'desert', 'tea', 'capital', 'isle', 'caravan', 'mirror']], ['やり込み', []]];
 const manCatOf = k => (MAN_CAT.find(c => c[1].includes(k)) || MAN_CAT[MAN_CAT.length - 1])[0];
@@ -5182,6 +5195,7 @@ const ACH = [
   {id:'k1', n:'魔物狩り', d:'魔物を1,000体倒す', c:s => totalKills(s) >= 1000, r:30000}, {id:'k2', n:'魔物博士', d:'すべての魔物に★1', c:s => Object.keys(MONT).every(k => monStar(k, s) >= 1), r:30000}, {id:'k3', n:'魔物の天敵', d:'すべての魔物に★3', c:s => Object.keys(MONT).every(k => monStar(k, s) >= 3), r:500000},
   {id:'ex5', n:'茶の湯の心', d:'野点の茶会を10回もてなす', c:s => (s.stat.chakai || 0) >= 10, r:50000}, {id:'ex6', n:'王室御用達', d:'王宮に10回献上する', c:s => (s.stat.royal || 0) >= 10, r:60000},
   {id:'ex7', n:'南の島の常連', d:'南の果実島ルルアの評判Lv5', c:s => expLv('isle') >= 5, r:80000}, {id:'ex8', n:'五つの町の料理人', d:'5つの町のレシピ60品をすべて教わる', c:s => [...TOWN_RI].every(ri => s.known.r[ri] || s.learned[ri]), r:200000},
+  {id:'wc1', n:'世界一の料理人', d:'世界料理大会で優勝する', c:s => (s.stat.wcWin || 0) >= 1, r:100000},
   {id:'w1', n:'昼と夜の店主', d:'白昼亭と提携する', c:s => s.rival && s.rival.ally, r:20000},
   {id:'a1', n:'創作料理人', d:'オリジナルレシピを5品作る', c:s => (s.aiRecs || []).length >= 5, r:5000},
 ];
@@ -7222,6 +7236,67 @@ function raidEnd() {
   const pos = rdRank(R).findIndex(x => x[2]) + 1;
   setTimeout(() => popStory(`<div class="tth">⚔ ${kill ? '大物を倒した！' : '討伐の時間が終わった'}</div><div class="ttx">今回のダメージ <b>${fmt(dmg)}</b>（今週の合計 ${fmt(R.my)}・いま${pos}位）<br>${RD[R.k].n}の残り体力 ${fmt(R.hp)}/${fmt(R.max)}${kill ? '<br>とどめを刺した！ 日曜が終わると、全員のごほうびが2倍になる。' : ''}</div>`), 500);
 }
+// ===== v0.67 世界料理大会（季節の終わりの月＝2・5・8・11月の最後の金〜日曜）
+const WC_RI = REC.map((r, i) => r.wc ? i : -1).filter(i => i >= 0); WC_RI.forEach(i => { SECRET_R.add(i); REC[i].value *= 3; });
+const WC_SEASON = {1:3, 4:0, 7:1, 10:2};   // 月→季節の限定レシピ（春0・夏1・秋2・冬3）
+const WC_TH = [{n:'魚介', f:r => r.ings.some(id => SEA_IDS.has(id)), lk:'sea'}, {n:'甘いもの', f:r => CRS_LIKE.sweet.f(r), lk:'sweet'}, {n:'煮込み', f:r => r.method === '煮る', lk:'meat'},
+  {n:'旬の野菜', f:r => r.ings.some(id => { const g = ING[INGI[id]]; return g && g.src[0] === 'seed' && inSeason(id) === true; }), lk:'veg'}, {n:'肉', f:r => CRS_LIKE.meat.f(r), lk:'meat'}, {n:'香辛料', f:r => CRS_LIKE.spicy.f(r), lk:'spicy'}];
+const WC_RIVAL = ['銀匙のセドリック', '炎の料理人ガロ', '東方の名人スイレン', '氷菓子の女王エルザ', '海の料理番ナギ'];
+const wcOn = () => unl('wcup');
+function wcStage(d) { const o = ymd(d); if (!(o.m in WC_SEASON)) return 0; const wd = wdOf(d); if (wd < 5) return 0; const fri = d - (wd - 5);
+  if (ymd(fri).m !== o.m || ymd(fri + 2).m !== o.m || ymd(fri + 9).m === o.m) return 0; return wd - 4; }
+function wcSt() { if (!S.wc) S.wc = {ev:-1, st:0, out:0, sub:{}, wins:0, best:0, n:0}; return S.wc; }
+function wcPar() { const vs = Object.keys(S.known.r).map(Number).filter(i => !SECRET_R.has(i)).map(i => dval('r' + i, false)).sort((a, b) => b - a).slice(0, 20); return Math.max(30, vs.reduce((a, v) => a + v, 0) / Math.max(1, vs.length)); }
+function wcCur() { const d = gday(), s = wcStage(d); if (!s) return null; const ev = d - (s - 1), W = wcSt(); if (W.ev !== ev) { W.ev = ev; W.st = 1; W.out = 0; W.sub = {}; W.par = wcPar(); W.th = (Math.floor(ev / 7)) % WC_TH.length; W.rival = WC_RIVAL[W.n % WC_RIVAL.length]; W.n++; }
+  return {s, ev, W}; }
+function wcDishScore(x, th, W) { const r = recOfKey(x.k), v = dval(x.k, x.g); let sc = Math.min(60, 50 * v / W.par); const fit = r && WC_TH[th].f(r) ? 25 : 0; const q = (x.g ? 10 : 0) + (mastLv(x.k) >= 4 ? 5 : 0) + (inSeasonDish(x.k) ? 5 : 0); return {sc:Math.round(sc + fit + q), fit, q, v:Math.round(sc)}; }
+function wcJudges(x, W) { const r = recOfKey(x.k), v = dval(x.k, x.g);
+  const j1 = Math.min(100, 70 * v / W.par + (x.g ? 15 : 0)), j2 = 40 + (inSeasonDish(x.k) ? 20 : 0) + ((S.mast[x.k] || 0) < 10 ? 15 : 0) + (x.g ? 10 : 0) + Math.min(15, 10 * v / W.par),
+    j3 = 40 + (isMonDish(x.k) ? 30 : 0) + (r && r.ings.some(id => ['ghost_tear', 'moon_drop', 'soul_flower', 'meifu_herb', 'abyss_fruit', 'yoru'].includes(id) || SPICE_IDS.has(id)) ? 15 : 0) + Math.min(15, 10 * v / W.par);
+  return [Math.round(j1), Math.round(Math.min(100, j2)), Math.round(Math.min(100, j3))]; }
+function wcNpc(n, mean, sd) { return Array.from({length:n}, () => Math.round(Math.max(10, mean + (Math.random() + Math.random() + Math.random() - 1.5) * sd))); }
+function wcStep() { if (!wcOn()) return; const c = wcCur(); const W = wcSt();
+  if (!c) { return; } if (W.st && W.st < c.s && !W.out && !W.sub[W.st]) { W.out = W.st; if (!simulating) toast(`🏆 世界料理大会：${['', '予選', '本選', '決勝'][W.st]}に出なかったので、今回は終わり。`, 3500); }
+  if (!W.out && W.st === c.s && !W.sub[c.s] && !W.ann) { W.ann = 1; if (!simulating) toast('🏆 世界料理大会の日！ 画面上の「🏆大会」から出よう', 3500); tut('m_wcup'); }
+  if (W.ann && c.s !== W.annS) { W.annS = c.s; W.ann = 0; } }
+function openWC(sel) {
+  if (!wcOn()) return; tut('m_wcup'); const c = wcCur(), W = wcSt();
+  let head = `<img src="${IMG.wc_venue.src}" style="width:100%;image-rendering:pixelated;border-radius:4px">`;
+  if (!c) { modal('世界料理大会', head + `<div class="p">季節の終わりの月（2・5・8・11月）の、最後の金〜日曜に雪の王都で開かれる（暦に載る）。金＝予選・土＝本選・日＝決勝。<br>これまで：${W.n}回出場・優勝${W.wins}回</div>${W.last ? `<div class="p" style="color:var(--sub)">${W.last}</div>` : ''}`, 'wcup'); return; }
+  const th = WC_TH[W.th], stg = ['', '予選', '本選', '決勝'][c.s], need = c.s === 1 ? 1 : c.s === 2 ? 2 : 3;
+  head += `<div class="p">今回のお題：<b>${th.n}</b>　決勝の相手：${W.rival}${W.wins ? `（あなたの優勝${W.wins}回ぶん手ごわい）` : ''}</div>`;
+  if (W.out) return modal('世界料理大会', head + `<div class="p">今回の大会は終わった（${['', '予選', '本選', '決勝'][W.out]}まで）。</div>${W.last ? `<div class="p">${W.last}</div>` : ''}`, 'wcup');
+  if (W.st > c.s || W.sub[c.s]) return modal('世界料理大会', head + `<div class="p">${stg}は出し終えた。${c.s < 3 ? '明日の' + ['', '', '本選', '決勝'][c.s + 1] + 'を待とう。' : ''}</div>${W.last ? `<div class="p">${W.last}</div>` : ''}`, 'wcup');
+  if (W.st < c.s) return modal('世界料理大会', head + '<div class="p">今回は出場していない。</div>', 'wcup');
+  W.pick = W.pick || []; const rule = c.s === 1 ? `お題「${th.n}」に合う料理を<b>1品</b>。16人中、上位8人が本選へ。点数＝値打ち（〜60）＋お題25＋品質（金色10・熟練★4以上5・旬5）` :
+    c.s === 2 ? '<b>2品</b>。審査員3人がそれぞれ採点（王宮料理長＝値打ち・金色／美食家＝旬・まだあまり作っていない珍しさ／魔女ミラ＝魔物料理・夜の食材・香辛料）。8人中、上位2人が決勝へ。' :
+    `<b>前菜・主菜・デザート</b>の3品で${W.rival}と勝負。点数＝食べ合わせ（コース料理と同じ。好みはお題「${th.n}」）×0.6＋料理の値打ち40。`;
+  let html = head + `<div class="h">${stg}（今日）</div><div class="p">${rule}</div><div style="display:flex;gap:${U}px">${Array.from({length:need}, (_, i) => { const x = W.pick[i]; return `<div class="btn ${x ? 'grn' : ''}" data-wp="${i}" style="flex:1;padding:${U}px 2px;text-align:center">${x ? dishIcHTML(x.k, U * 10, x.g) + `<div style="font-size:.75em">${dishInfo(x.k).name}</div>` : `＋${c.s === 3 ? CRS_ROLE[CRS_SLOTS[i]].n : (i + 1) + '品目'}`}</div>`; }).join('')}</div>`;
+  if (sel != null) { const L = allDishes().slice(0, 60).map(x => ({...x, fit:c.s === 1 ? (recOfKey(x.k) && th.f(recOfKey(x.k))) : c.s === 3 ? crsRoleFit(x.k, CRS_SLOTS[sel]) >= 25 : false})).sort((a, b) => b.fit - a.fit || dval(b.k, b.g) - dval(a.k, a.g));
+    modal('料理を選ぶ', L.map(x => `<div class="row">${dishIcHTML(x.k, U * 10, x.g)}<div class="t"><b>${x.g ? '金色の' : ''}${dishInfo(x.k).name}</b><span>×${x.n}　${fmt(dval(x.k, x.g))}G${x.fit ? '　◎' : ''}${inSeasonDish(x.k) ? '　旬' : ''}</span></div><div class="btn grn" data-wc="${x.k}|${x.g ? 1 : 0}">選ぶ</div></div>`).join('') + '<div class="btn" data-a="bk">もどる</div>', 'wcpick');
+    bind('[data-a=bk]', () => openWC()); bind('[data-wc]', d => { const [k, g] = d.wc.split('|'); W.pick[sel] = {k, g:g === '1'}; openWC(); }); return; }
+  const ok = W.pick.length >= need && W.pick.slice(0, need).every(Boolean);
+  html += `<div class="btn big ${ok ? 'red' : 'dis'}" data-a="sub" style="margin-top:${U}px">この料理で${stg}に出す（料理は1皿ずつ使う）</div>`;
+  modal('世界料理大会', html, 'wcup');
+  bind('[data-wp]', d => openWC(+d.wp));
+  bind('[data-a=sub]', () => { if (!ok) return; const P = W.pick.slice(0, need); for (const x of P) if (haveDish(x.k, x.g) < P.filter(y => y.k === x.k && y.g === x.g).length) return toast('その料理が足りない'); for (const x of P) takeDish(x.k, x.g, 1); W.pick = []; wcJudge(c.s, P); });
+}
+function wcJudge(s, P) {
+  const W = wcSt(), th = W.th; W.sub[s] = 1; let my, npc, adv, lines = [], tbl;
+  if (s === 1) { const r = wcDishScore(P[0], th, W); my = r.sc; npc = wcNpc(15, 58 + W.wins * 2, 14); lines.push(`値打ち ${r.v}／お題 ${r.fit}／品質 ${r.q}`); adv = 8; }
+  else if (s === 2) { const js = P.map(x => wcJudges(x, W)); my = Math.round(js.flat().reduce((a, v) => a + v, 0) / 6); npc = wcNpc(7, 60 + W.wins * 2, 10); lines.push(`王宮料理長 ${Math.round((js[0][0] + js[1][0]) / 2)}／美食家 ${Math.round((js[0][1] + js[1][1]) / 2)}／魔女ミラ ${Math.round((js[0][2] + js[1][2]) / 2)}`); adv = 2; }
+  else { const cs = crsScore({set:P, like:WC_TH[th].lk}), v = Math.min(40, 30 * P.reduce((a, x) => a + dval(x.k, x.g), 0) / 3 / (W.par * .7)); my = Math.round(cs.sc * .6 + v); npc = [Math.min(97, Math.round(72 + W.wins * 4 + rnd(-6, 6)))]; lines.push(`食べ合わせ ${cs.sc}点×0.6＋値打ち ${Math.round(v)}`); adv = 1; }
+  const all = [['宵闇亭（あなた）', my, 1], ...npc.map((v, i) => [s === 3 ? W.rival : `料理人${i + 1}`, v, 0])].sort((a, b) => b[1] - a[1]), pos = all.findIndex(x => x[2]) + 1, pass = pos <= adv;
+  tbl = all.slice(0, Math.max(adv + 1, 4)).map((x, i) => `${i + 1}位 ${x[2] ? '<b>' + x[0] + '</b>' : x[0]} ${x[1]}点`).join('<br>');
+  let res = ''; const par = W.par;
+  if (pass && s < 3) { W.st = s + 1; res = `<b>${['', '本選', '決勝'][s]}へ進んだ！</b>（明日）`; }
+  else if (pass && s === 3) { W.out = 3; W.wins++; const gold = Math.round(par * 600 * (1 + W.wins * .2) / 100) * 100; S.gold += gold; S.stat.wcWin = (S.stat.wcWin || 0) + 1;
+    const ri = WC_RI[WC_SEASON[ymd(gday()).m]]; let learn = ''; if (ri != null && !S.known.r[ri] && !S.learned[ri]) { S.learned[ri] = true; RKEY[REC[ri].key] = ri; learn = `<br>限定レシピ『${REC[ri].name}』を授かった！`; }
+    if (unl('fame')) { const F = fameState(); F.xp += fameNeed(F.lv) * .5; } res = `<b>🏆 優勝！</b> 賞金 ${fmt(gold)}G・名声アップ${learn}`; sfx('fanfare'); }
+  else { W.out = s; const gold = s === 3 ? Math.round(par * 250 / 100) * 100 : s === 2 ? Math.round(par * 80 / 100) * 100 : 0; S.gold += gold; res = `${pos}位で、今回はここまで。${gold ? `賞金 ${fmt(gold)}G` : ''}`; }
+  W.best = Math.max(W.best, s + (pass && s === 3 ? 1 : 0)); W.last = `前回（${['', '予選', '本選', '決勝'][s]}）：${res.replace(/<[^>]+>/g, '')}`; dirty = true;
+  popStory(`<div class="tth">🏆 世界料理大会 ${['', '予選', '本選', '決勝'][s]}</div>${s === 3 && pass ? `<div style="text-align:center"><img src="${IMG.wc_cup.src}" style="width:${U * 20}px;image-rendering:pixelated"></div>` : ''}<div class="ttx">あなたの点数 <b>${my}点</b>（${lines.join('')}）<br><br>${tbl}<br><br>${res}</div>`, () => openWC());
+}
 // ===== v0.40: 魔物牧場・使い魔・薬草と調合
 const POTD = {}; (D.pot || []).forEach(([id, rc, d]) => POTD[id] = {rc, d});
 const POT_IDS = Object.keys(POTD);
@@ -7649,6 +7724,7 @@ function todoList() {
   const out = [], add_ = (i, t, go_) => out.push({i, t, go:go_});
   const ripe = PIDX().filter(j => ready(S.plots[j])).length; if (ripe) add_('🌾', `農場の作物が${ripe}つ実っている`, 'farm');
   const empty = PIDX().filter(j => !S.plots[j].seed).length; if (empty && unl('quality')) add_('🌱', `農場の空いた区画が${empty}つ`, 'farm');
+  if (wcOn()) { const c = wcCur(), W = wcSt(); if (c && !W.out && W.st === c.s && !W.sub[c.s]) add_('🏆', `世界料理大会の${['', '予選', '本選', '決勝'][c.s]}（今日）：料理を出そう（画面上の「🏆大会」）`, 'wcup'); }
   if (rdOn()) { const R = rdSt(); if (!R.done && (R.td !== gday() || R.tries < 3)) add_('⚔', `大物討伐：${RD[R.k].n}（今日あと${R.td === gday() ? 3 - R.tries : 3}回・ギルドの受付）`, 'guild'); }
   if (crsOn()) { const w = crsSt().list.filter(R => R.set.some(x => !x)); if (w.length) add_('📖', `コースの予約${w.length}組：前菜・主菜・デザートをそろえる（店内の「📖予約」）`, 'interior'); }
   if (unl('stele') && typeof stSt === 'function') { const T = stSt(), n = STELE_T.filter(x => T.got[x]).length; if (n < 5) add_('🪨', `石碑の紋 ${n}/5（まだ：${STELE_T.filter(x => !T.got[x]).map(x => (TOWNC[x] || {}).n || x).join('・')}の広場）`, 'expmap'); }
@@ -7673,7 +7749,7 @@ const TRAVEL = [['interior', '宵闇亭（店内）', 109, 108, () => true], ['o
   ['cellar', '地下貯蔵庫', 124, 66, () => S.fac.cellar > 0], ['upstairs', '2階', 38, 266, () => S.fac.upstairs > 0], ['guild', '冒険者ギルド', 72, 296, () => unl('guild')], ['mranch', '魔物牧場と薬草園', 72, 306, () => unl('mranch')], ['museum', '博物館', 72, 276, () => unl('museum')], ['oldtown', '旧市街', 74, 310, () => unl('restore')]];
 function travelOk() { return !['mine', 'mfarm'].includes(scene) && !isBio() && !TOWNC[scene] && !fishSt; }
 function goTravel(k) {
-  if (k === 'cara') return openCaravan(); if (k === 'tmap') return openTmList(); if (k === 'squad') return openSquad(); if (k === 'oorder') return openAiRecs(); if (k === 'expmap') return openExpMap(); if (!k) return;
+  if (k === 'cara') return openCaravan(); if (k === 'tmap') return openTmList(); if (k === 'squad') return openSquad(); if (k === 'oorder') return openAiRecs(); if (k === 'expmap') return openExpMap(); if (k === 'wcup') return openWC(); if (!k) return;
   if (!travelOk()) return toast(TOWNC[scene] ? '遠征先からは馬車で帰ろう' : 'ここからは移動できない（迷宮・採集地では使えない）');
   const t = TRAVEL.find(x => x[0] === k); if (!t || !t[4]()) return; closeModal(); go(t[0], t[2], t[3]);
 }
@@ -7681,7 +7757,7 @@ function openTodo(tab) {
   tab = tab || 'todo'; tut('todo'); const L = todoList();
   const seg = `<div class="seg"><div class="${tab === 'todo' ? 'on' : ''}" data-tt="todo">やること ${L.length}</div><div class="${tab === 'log' ? 'on' : ''}" data-tt="log">お知らせの履歴</div><div class="${tab === 'go' ? 'on' : ''}" data-tt="go">移動</div></div>`;
   let body = '';
-  if (tab === 'todo') body = L.map(x => `<div class="row"><div class="calev">${x.i}</div><div class="t"><b>${x.t}</b></div>${x.go ? `<div class="btn" data-g="${x.go}">${['cara', 'tmap', 'squad', 'oorder', 'expmap'].includes(x.go) ? '見る' : '行く'}</div>` : ''}</div>`).join('') || '<div class="p">いまは急いでやることはない。のんびりいこう。</div>';
+  if (tab === 'todo') body = L.map(x => `<div class="row"><div class="calev">${x.i}</div><div class="t"><b>${x.t}</b></div>${x.go ? `<div class="btn" data-g="${x.go}">${['cara', 'tmap', 'squad', 'oorder', 'expmap', 'wcup'].includes(x.go) ? '見る' : '行く'}</div>` : ''}</div>`).join('') || '<div class="p">いまは急いでやることはない。のんびりいこう。</div>';
   else if (tab === 'log') body = TLOG.map(x => `<div class="row"><div class="t"><span style="font-size:${U * 3.9}px;color:#e8d8b8">${x.t}</span></div></div>`).join('') || '<div class="p">まだお知らせはない。</div>';
   else body = `<div class="p">${travelOk() ? 'ワンタップで移動できる（歩く時間を省く）。' : '<span style="color:#d8806a">迷宮・採集地・遠征先では使えない。</span>'}</div>` + TRAVEL.filter(t => t[4]()).map(t => `<div class="row"><div class="t"><b>${t[1]}</b></div><div class="btn ${scene === t[0] || !travelOk() ? 'dis' : 'grn'}" data-g="${t[0]}">${scene === t[0] ? 'いまここ' : '移動'}</div></div>`).join('') +
     `${unl('mine') ? '<div class="btn" data-a="mine" style="margin-top:3px">⛏ 地下迷宮へ（古井戸）</div>' : ''}${unl('forage') ? '<div class="btn" data-a="bio" style="margin-top:3px">🗺 採集の地図</div>' : ''}${unl('expedition') ? '<div class="btn" data-a="exp" style="margin-top:3px">⚓ 遠征の地図</div>' : ''}`;
@@ -8755,7 +8831,7 @@ async function boot() {
   bootMark('はじめ');
   if (bootPrev && !bootPrev.done && Date.now() - bootPrev.t < 600000) BOOTERR.push('前回の起動が「' + bootPrev.st + '」で止まった');
   layout();
-  const ks = ['atlas','world','sil','gold','chars','charsUI','bg_interior','bg_outside','bg_farm','bg_farm2','logo','machines','workshop','rocks','bg_farm3','bg_farm4','bg_mine0','bg_mine1','bg_mine2','bg_mine3','bg_mine4','bg_mine5','bg_fpond','bg_fpier','bg_flake','tackle','bg_upstairs','stairs','bg_wilds','bg_stall','wagon','decor','bed','bg_b_river','bg_b_flower','bg_b_marsh','bg_b_volcano','bg_b_snow','bg_b_moon','bmap','gimmick','dog','rival','bg_cellar','cellarobj','trapdoor','bg_deep_deep','bg_deep_mist','bg_deep_dark','bg_deep_vein','bg_deep_den','bg_deep_garden','tower_a0','tower_a1','tower_a2','tower_a3','tower_a4','tower_ext','tower_far','tower_off','bg_port','exp_map','exp_map2','bg_desert','exp_map3','exp_map4','exp_map5','bg_tea','bg_capital','bg_isle','bg_guild1','bg_guild2','bg_guild3','bg_guild4','bg_guild5','guild_sign','cara_banner','wagons','cmark','bosses','curse_statue','bg_mranch','guild_sign2','bg_museum','bg_oldtown','bld_chapel','bld_library','bld_school','bld_theater','bld_bathhouse','bld_garden','bld_smithy','bld_gate','bg_mirror','place','bg_mfarm','bg_dg_mirror','bg_dgb_mirror','dg_gate_mirror','mgate','cportraits','steles','sealdoor','digspot','bigchest','crackwall','bg_vault','bg_ancient','moonstall','forge','stall_spr','bg_tavern','bg_arena','tv_boards','bg_hill','hill_ov2','hill_ov3','bg_tw0','bg_tw1','bg_tw2','bg_raid','bg_twb0','bg_twb1','bg_twb2','dg_gate_tower',...['l0','l1','l2','l3','l4','l5','deep','ship','temple','shrine','castle','volcano'].map(t => 'rocks_' + t),...['ship','temple','shrine','castle','volcano'].flatMap(k => ['bg_dg_' + k, 'bg_dgb_' + k, 'dg_gate_' + k])];
+  const ks = ['atlas','world','sil','gold','chars','charsUI','bg_interior','bg_outside','bg_farm','bg_farm2','logo','machines','workshop','rocks','bg_farm3','bg_farm4','bg_mine0','bg_mine1','bg_mine2','bg_mine3','bg_mine4','bg_mine5','bg_fpond','bg_fpier','bg_flake','tackle','bg_upstairs','stairs','bg_wilds','bg_stall','wagon','decor','bed','bg_b_river','bg_b_flower','bg_b_marsh','bg_b_volcano','bg_b_snow','bg_b_moon','bmap','gimmick','dog','rival','bg_cellar','cellarobj','trapdoor','bg_deep_deep','bg_deep_mist','bg_deep_dark','bg_deep_vein','bg_deep_den','bg_deep_garden','tower_a0','tower_a1','tower_a2','tower_a3','tower_a4','tower_ext','tower_far','tower_off','bg_port','exp_map','exp_map2','bg_desert','exp_map3','exp_map4','exp_map5','bg_tea','bg_capital','bg_isle','bg_guild1','bg_guild2','bg_guild3','bg_guild4','bg_guild5','guild_sign','cara_banner','wagons','cmark','bosses','curse_statue','bg_mranch','guild_sign2','bg_museum','bg_oldtown','bld_chapel','bld_library','bld_school','bld_theater','bld_bathhouse','bld_garden','bld_smithy','bld_gate','bg_mirror','place','bg_mfarm','bg_dg_mirror','bg_dgb_mirror','dg_gate_mirror','mgate','cportraits','steles','sealdoor','digspot','bigchest','crackwall','bg_vault','bg_ancient','moonstall','forge','stall_spr','bg_tavern','bg_arena','tv_boards','bg_hill','hill_ov2','hill_ov3','bg_tw0','bg_tw1','bg_tw2','bg_raid','wc_venue','wc_cup','bg_twb0','bg_twb1','bg_twb2','dg_gate_tower',...['l0','l1','l2','l3','l4','l5','deep','ship','temple','shrine','castle','volcano'].map(t => 'rocks_' + t),...['ship','temple','shrine','castle','volcano'].flatMap(k => ['bg_dg_' + k, 'bg_dgb_' + k, 'dg_gate_' + k])];
   introMsg('読み込み中…（画像）'); let nl = 0; await Promise.all(ks.map(k => loadImg(k, A[k]).then(() => { if (++nl % 20 === 0) introMsg(`読み込み中…（画像 ${nl}/${ks.length}）`); })));
   bootMark('画像の準備'); introMsg('読み込み中…（画像の準備）'); await new Promise(r => setTimeout(r, 20));
   for (const k of ['atlas','sil','gold','charsUI','tackle']) URL_[k] = BLOBU[k] || ('data:image/png;base64,' + A[k]);
