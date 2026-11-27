@@ -183,6 +183,7 @@ const UNL = {
   secret:{n:'迷宮の隠し部屋', i:'🧱', d:'迷宮やダンジョンの階に、ひび割れた壁が現れるようになった。崩すと昔の冒険者の隠し部屋がある。', tut:'secret'},
   moon:{n:'満月の夜', i:'🌕', d:'毎週木曜の夜は満月。広場に月の兎の夜店が出て、迷宮には月光スライムが現れ、魔物がなつきやすくなる。', tut:'moon'},
   stele:{n:'石碑と封印の扉', i:'🪨', d:'5つの町の広場に、古い石碑が見えるようになった。紋を集めると、地下迷宮B1の封印の扉が開く。', tut:'stele'},
+  course:{n:'コース料理と予約客', i:'📖', d:'店の格が「伝説の宵闇亭」になり、<b>コースの予約</b>が入るようになった。店内の「📖予約」で、前菜・主菜・デザートをそろえよう。', tut:'m_course'},
   shugyo:{n:'霊峰の修練の塔・技・武器の成長', i:'🗼', d:'奈落の深層B60にたどり着き、古井戸の奥の転移の石から「霊峰の修練の塔」へ行けるようになった。武器の<b>技</b>（ゲージ）と<b>武器の成長・覚醒</b>、<b>銘の武器</b>（12系列）も始まる。', tut:'m_tower'},
   hill:{n:'丘の農地', i:'⛰', d:'裏の農場のいちばん下の道から、奥の「丘の農地」へ行けるようになった。土地を買うと、畑・果樹・特別な畑・動物が増やせる。', tut:'m_hill'},
   tavern:{n:'冒険者の酒場', i:'🍺', d:'ギルドの建物の中が酒場になった。カウンターで冒険者たちの注文を受けて料理を届けると、お金とギルドポイント。', tut:'m_tavern'},
@@ -931,6 +932,8 @@ function step(dt, vis) {
   if (typeof v48Tick === 'function') v48Tick();
   if (typeof hillStep === 'function') { hillUnl(); hillStep(dt, vis); }
   if (typeof twUnl === 'function') twUnl();
+  if (!unl('course') && rankIdx() >= 4) unlockFeature('course');
+  if (typeof crsStep === 'function') crsStep();
   if (soilOn() && !S.soilIntro && !simulating && (scene === 'farm' || scene === 'hill')) { S.soilIntro = 1; tut('m_soil'); }
   if (S.aucPre) aucPreStep();
   // ranch
@@ -1344,6 +1347,7 @@ function chips() {
   let h = `<div class="chip" data-c="idle">💤放置</div>`;
   if (scene !== 'mine') { const n = todoList().length; h += `<div class="chip ${n ? 'grn' : ''}" data-c="todo">📋${n || ''}</div>`; }
   if (scene === 'interior') {
+    if (crsOn()) { const c = crsSt().list, w = c.filter(R => R.set.some(x => !x)).length; h += `<div class="chip ${w ? 'red' : c.length ? 'grn' : 'off'}" data-c="course">📖予約${c.length ? c.length : ''}</div>`; }
     h += canOpen() ? `<div class="chip grn" data-c="open">🔔開店する</div>` : isOpenNow() ? `<div class="chip grn" data-c="hours">営業中</div><div class="chip red" data-c="close">閉店する</div>` : `<div class="chip off" data-c="hours">閉店中</div>`;
     if (S.nightOpen) h += `<div class="chip blu" data-c="nightinfo">🌙裏営業中</div>${unl('dice') ? '<div class="chip grn" data-c="dice">🎲サイコロ</div>' : ''}<div class="chip red" data-c="nightend">終える</div>`; else if (canNight()) h += `<div class="chip blu" data-c="night">🌙裏営業</div>`;
     const can = S.staff.clerk > 0;
@@ -1398,6 +1402,7 @@ function chipAct(c) {
   else if (c === 'tmap') openTmList();
   else if (c === 'moon') { if (takeIng('moon_extract', false, 1)) { S.luck3T = S.t + 1800; sfx('ok'); syncBag(); toast('✨ 月光エキスを使った。30分間、金色の食材がとても出やすい。', 3500); } }
   else if (c === 'skill') { useSkill(); }
+  else if (c === 'course') { openCourse(); }
   else if (c === 'scroll') { if (takeIng('scroll', false, 1)) { closeModal(); scrollReturn(); } }
   dirty = true; chips();
 }
@@ -2908,6 +2913,7 @@ const TUT = {
   m_tower:['霊峰の修練の塔', '古井戸（地下迷宮の入口）の「🗼霊峰の修練の塔へ」から行ける。全30階＋頂。どの階も敵を全部倒すと階段が出る。10階・20階・頂に<b>階の主</b>。<br><b>鎧</b>（青いゲージ）を着た敵は<b>技でしか鎧を割れない</b>。盾持ちはふつうの攻撃を7割防ぐ。<br>階を制すると<b>修練の証</b>。証は覚醒と、好きな<b>銘の武器</b>との交換に使う。'],
   m_skill:['技', '攻撃を当てる（または攻撃を受ける）と、足元のゲージがたまる。満タンになったら、画面上の<b>「⚔技！」</b>を押そう。<br>技は武器の種類で決まる（剣＝回転斬り、短剣＝連撃、槍＝突進突き、槌・斧＝大地割り、弓＝矢の雨、杖＝魔法陣、包丁＝解体、鎌＝大旋風、鞭＝縛り打ち）。<b>銘の武器</b>は技に追加効果がのる。'],
   m_wgrow:['武器の成長と覚醒', '装備している武器は、魔物を倒すと経験がたまり<b>Lv</b>が上がる（Lvごとに攻撃+2%、Lv20まで）。<br>Lv20の<b>銘・伝説・ボスの武器</b>は、鍛冶屋の工房で<b>覚醒</b>できる（攻撃×1.2・技1.5倍・付与の枠+1、名前に「真・」）。覚醒のあとも、使うほど上限なしで+1%ずつ強くなる。'],
+  m_course:['コース料理と予約客', '毎朝6時に、その日の夜（18:30〜21:00）の<b>コースの予約</b>が0〜2組入る。店内の画面上の<b>「📖予約」</b>で、倉庫の料理から<b>前菜・主菜・デザート</b>を人数ぶん選んでおこう。<br>時間になるとお客さんが来て食べる。<b>食べ合わせの点数</b>（役割に合う・食材がかぶらない・調理法がばらばら・好み・旬と品質）で、お代が最大2.5倍になる。用意できないと評判-1。'],
   m_soil:['畑の土と輪作', '畑の区画には<b>土の肥えぐあい</b>がある（区画の色：黒っぽい＝肥えた土、白っぽい＝やせた土、ひび＝カラカラ）。<br>同じ仲間の作物（葉もの・根もの・実もの・豆・穀物・いも・香草・きのこ）を続けて育てると<b>連作</b>で土がやせ、品質も下がる。<b>ちがう仲間</b>を順に育てる（輪作）と品質と量が上がる。<br><b>豆</b>（大豆・枝豆・落花生）は土を肥やす。肥料をまく・たい肥をすき込む・区画を空けて休ませても戻る。'],
   m_hill:['丘の農地', '裏の農場のいちばん下から行ける、奥の丘。下の<b>立て札</b>で土地を買う（1区→2区→3区の順）。<br>1区ごとに<b>畑8区画・果樹4本</b>が増える。畑の扱い（種・水やり・道具・農夫）は裏の農場と同じ。<br>植えた苗木は、木をタップして<b>「抜く」</b>と植え替えられる（苗木代の半分が戻る）。'],
   m_hillsp:['特別な畑と動物', '<b>特別な畑</b>（2区：棚田・茶畑、3区：ぶどう棚・きのこの原木）は一度建てると、種なしで育ち続ける。収穫は2回分までためておけて、農夫がいると自動で収穫。<br><b>動物</b>（1区）：羊＝羊乳、ヤギ＝ヤギ乳、豚＝トリュフやきのこを掘る、アヒル＝卵。小屋を建てると2頭、増築で4頭。えさはいらない。<br>羊乳・ヤギ乳は<b>乳製品台</b>で、茶葉ともち米は<b>石臼</b>で加工できる。'],
@@ -4836,6 +4842,10 @@ const MAN = [
     '<b>武器の成長</b>：装備中の武器で倒すと経験（ふつう1＋深さ/25、ボス40）。次のLvまで 20＋10×Lv。Lvごとに攻撃+2%（Lv20で+38%）。',
     '<b>覚醒</b>（銘・伝説・ボスの武器、Lv20）：工房で 奈落晶×5・修練の証×10・50,000G。攻撃×1.2・技1.5倍・付与の枠+1、名前に「真・」と光る絵。覚醒のあとは 300＋20×覚醒Lv の経験ごとに+1%（上限なし）。',
     '<b>修練の塔</b>：全30階＋頂（31階）。魔物の強さは、あなたの深層の最深記録の85%の深さに合わせて決まる（B60より浅い記録ならB60相当）。魔物は小鬼（大群れ）・盾持ちの石兵（ふつうの攻撃を7割防ぐ。ひるんでいる間は防げない）・鎧武者（鎧）・修行僧の亡霊・山の鷹。10階＝石の門番ゴーレム、20階＝鎧の大将、頂＝天狗の大師範（どれも鎧つき）。階を初めて制すると証+3（2回目から+1）、階の主は証+10（頂+20）と賞金と銘の武器。11階・21階から登れる。呪いもかけられる。'])},
+  {k:'course', t:'コース料理と予約客', c:() => crsOn(), h:() => li(['解放：店の格が「伝説の宵闇亭」になると。毎朝6時に、その日の18:30〜21:00の予約が0〜2組（1〜4名、好みつき）。',
+    '店内の「📖予約」で、前菜・主菜・デザートを人数ぶん選ぶ（倉庫・カバン・棚から取り分ける。外すと戻る）。時間になると来店して食べる。用意できていないと帰ってしまい評判-1。',
+    '<b>食べ合わせの点数</b>（100点）：役割に合う40（前菜＝サラダ・スープ・刺身・豆腐・卵など／和える・生・蒸す、主菜＝肉・魚・煮込み・炒め・揚げ・丼・麺など、デザート＝タルト・プリン・パンケーキなど甘いもの）／食材がかぶらない15（基本の調味料は数えない）／調理法が3つちがう10／好み（魚介・肉・野菜・甘いもの・辛いもの）15／旬・品質20（旬、金色、熟練★4以上）。',
+    'お代＝3品の値打ちの合計×人数×(1＋1.5×点数/100)。評判も上がる（点数/25）。白昼亭のお題の売上にも入る。'])},
   {k:'soil', t:'畑の土と輪作', c:() => soilOn(), h:() => li(['区画ごとに<b>土</b>（0〜100、はじめ60）。肥えた土（75〜）＝育ち+12%・品質+0.3〜0.6・25%で収穫+1／ふつう（45〜）／やせた土（25〜）＝育ち-8%・品質が下がる／カラカラ（〜24）＝育ち-20%。区画の色でわかる。',
     '収穫するたびに土が減る（ふつう-5）。<b>前と同じ仲間</b>を続けると<b>連作</b>：土-12・品質-0.4（やせた土なら30%で収穫-1）。<b>ちがう仲間</b>（輪作）：品質+0.3・20%で収穫+1。',
     '仲間：' + Object.entries(CROP_FAM).map(([k, a]) => `${FAM_N[k]}＝${a.slice(0, 5).map(ingName).join('・')}${a.length > 5 ? 'など' : ''}`).join('／'),
@@ -5047,7 +5057,7 @@ const MAN = [
   }},
 ];
 let manSel = 'flow';
-const MAN_CAT = [['基本', ['flow', 'ctrl', 'res', 'cook', 'wish', 'forgehut', 'shop', 'orders', 'fac', 'xfer', 'src']], ['店', ['staff', 'reg', 'critic', 'decor', 'night', 'expand', 'town', 'money', 'contest', 'cellar', 'rival', 'fame', 'kiwami', 'airec', 'stall', 'merchant']],
+const MAN_CAT = [['基本', ['flow', 'ctrl', 'res', 'cook', 'wish', 'forgehut', 'shop', 'orders', 'fac', 'xfer', 'src']], ['店', ['course', 'staff', 'reg', 'critic', 'decor', 'night', 'expand', 'town', 'money', 'contest', 'cellar', 'rival', 'fame', 'kiwami', 'airec', 'stall', 'merchant']],
   ['農・釣り', ['farm', 'soil', 'hill', 'ranch', 'mach', 'brewer', 'breed', 'fish', 'fishmk', 'forage', 'season', 'quality']], ['冒険', ['shugyo', 'mine', 'plgrow', 'scroll', 'works', 'tavern', 'monster', 'story', 'guild', 'arms', 'dungeon', 'secrets', 'abyss', 'tower']],
   ['町・遠征', ['expedition', 'desert', 'tea', 'capital', 'isle', 'caravan', 'mirror']], ['やり込み', []]];
 const manCatOf = k => (MAN_CAT.find(c => c[1].includes(k)) || MAN_CAT[MAN_CAT.length - 1])[0];
@@ -7094,6 +7104,67 @@ function drawSkillLayer() {   // 技の光と、鎧のゲージ・技のゲー�
   if (skOn() && eqW()) { const M = mineState(), v = (M.sk || 0) / 100; ctx.fillStyle = '#140c08'; ctx.fillRect(player.x - 8, player.y + 3, 16, 2); ctx.fillStyle = v >= 1 ? (Math.sin(tNow * 10) > 0 ? '#ffe070' : '#ff9a40') : '#c8a050'; ctx.fillRect(player.x - 8, player.y + 3, Math.round(16 * v), 2); }
   return out;
 }
+// ===== v0.65 コース料理と予約客：予約帳に前菜・主菜・デザートの3品をそろえ、食べ合わせの点数で支払いが最大2.5倍
+const CRS_ROLE = {app:{n:'前菜', st:['salad', 'soup', 'sliced', 'sashimi', 'tofu', 'egg', 'caprese', 'egg2', 'x'], me:['和える', '生', '蒸す']},
+  main:{n:'主菜', st:['meat', 'fish', 'stew', 'stirfry', 'fried', 'grilled', 'cutlet', 'curry', 'donburi', 'pasta', 'rice', 'skewer', 'patty', 'pizza', 'dumpling', 'noodle', 'noodlesoup', 'rolls', 'bun', 'onigiri', 'tuber'], me:['焼く', '煮る', '揚げる', '炒める', '炊く']},
+  des:{n:'デザート', st:['tart', 'pudding', 'custard', 'pancake', 'pie', 'donut'], me:[]}};
+const CRS_SLOTS = ['app', 'main', 'des'];
+const CRS_BASE = new Set(['salt', 'sugar', 'oil', 'soysauce', 'miso', 'vinegar', 'butter', 'flour', 'black_pepper', 'olive_oil', 'egg', 'milk', 'water']);
+const CRS_LIKE = {sea:{n:'魚介', f:r => r.ings.some(id => SEA_IDS.has(id))}, meat:{n:'肉', f:r => r.ings.some(id => ['beef', 'pork', 'chicken', 'lamb', 'boar', 'duck', 'venison', 'ham', 'bacon', 'sausage', 'mince'].includes(id))},
+  veg:{n:'野菜', f:r => r.ings.some(id => { const g = ING[INGI[id]]; return g && g.src[0] === 'seed'; })}, sweet:{n:'甘いもの', f:r => r.ings.some(id => SWEET_IDS.has(id)) || ['tart', 'pudding', 'custard', 'pancake', 'pie', 'donut'].includes(r.style)},
+  spicy:{n:'辛いもの', f:r => r.ings.some(id => SPICE_IDS.has(id))}};
+const crsOn = () => unl('course');
+const recOfKey = k => k && k[0] === 'r' ? REC[+k.slice(1)] : null;
+function crsRoleFit(k, role) { const r = recOfKey(k), di = dishInfo(k); const R = CRS_ROLE[role];
+  if (role === 'des') return r && R.st.includes(r.style) ? 25 : r && r.ings.some(id => SWEET_IDS.has(id)) && !CRS_ROLE.main.st.includes(r.style) ? 15 : 3;
+  if (r && R.st.includes(r.style)) return 25; if (R.me.includes(di.method)) return 15; return 5; }
+function crsScore(R) {   // R = {set:[{k,g}×3], like}
+  const it = R.set.map((x, i) => x ? {...x, role:CRS_SLOTS[i], di:dishInfo(x.k), r:recOfKey(x.k)} : null); if (it.some(x => !x)) return null;
+  const parts = []; let sc = 0;
+  const fit = it.reduce((a, x, i) => a + (it.findIndex(y => y.k === x.k) < i ? 0 : crsRoleFit(x.k, x.role)), 0) * 40 / 75; /* 同じ料理を2回出すと、2回目は役割の点なし */ sc += fit; parts.push(['役割に合う', Math.round(fit), 40]);
+  const ings = it.map(x => x.di.ings.filter(id => !CRS_BASE.has(id))); let dup = 0; for (let a = 0; a < 3; a++) for (let b = a + 1; b < 3; b++) dup += ings[a].filter(id => ings[b].includes(id)).length;
+  const v1 = Math.max(0, 15 - dup * 6); sc += v1; parts.push(['食材がかぶらない', v1, 15]);
+  const ms = new Set(it.map(x => x.di.method)).size, v2 = ms === 3 ? 10 : ms === 2 ? 5 : 0; sc += v2; parts.push(['調理法がばらばら', v2, 10]);
+  const lk = CRS_LIKE[R.like], nl = it.filter(x => x.r && lk.f(x.r)).length, v3 = Math.min(15, nl * 8); sc += v3; parts.push([`好み（${lk.n}）`, v3, 15]);
+  const v4 = Math.min(10, it.filter(x => inSeasonDish(x.k)).length * 4) + Math.min(10, it.filter(x => x.g).length * 4 + it.filter(x => mastLv(x.k) >= 4).length * 2); sc += v4; parts.push(['旬・品質（金色・熟練）', v4, 20]);
+  return {sc:Math.round(Math.min(100, sc)), parts};
+}
+function crsSt() { if (!S.crs) S.crs = {list:[], day:-1, best:0, n:0, id:0}; return S.crs; }
+const CRS_WHO = ['王都の貴族ご一行', '旅の美食家', '港の船長夫妻', '騎士団の隊長', '魔女のミラとお友だち', '白昼亭のヒナタ', '冒険者の一団', '商人ギルドの会長', '茶の里の茶人', '恋人たち'];
+function crsStep() {
+  if (!crsOn()) return; const C = crsSt(), d = gday(), hm = hmNow();
+  if (C.day !== d && hm >= 360) { C.day = d; const n = Math.random() < .25 ? 2 : Math.random() < .85 ? 1 : 0;
+    for (let i = 0; i < n; i++) { const at = d * 1440 + [1110, 1140, 1170, 1200, 1230, 1260][Math.floor(Math.random() * 6)]; C.list.push({id:++C.id, who:pick(CRS_WHO), n:1 + Math.floor(Math.random() * 4), at, like:pick(Object.keys(CRS_LIKE)), set:[null, null, null]}); }
+    if (n && !simulating) toast(`📖 コースの予約が${n}組入った（店内の「📖予約」から、前菜・主菜・デザートをそろえよう）`, 4000); if (n) tut('m_course'); }
+  for (const R of C.list.slice()) if (S.t >= R.at) crsServe(R);
+}
+function crsServe(R) {
+  const C = crsSt(); C.list = C.list.filter(x => x !== R);
+  if (R.set.some(x => !x)) { R.set.forEach(x => { if (x) add(x.g ? S.dishG : S.dish, x.k, R.n); }); S.rep = Math.max(0, S.rep - 1); if (!simulating) toast(`📖 ${R.who}のコースが用意できず、お客さんは帰ってしまった……（評判-1）`, 3500); else rep_.course = (rep_.course || '') + '用意できなかった予約あり。'; return; }
+  const s = crsScore(R), base = R.set.reduce((a, x) => a + dval(x.k, x.g), 0) * R.n, mul = 1 + 1.5 * s.sc / 100, pay = Math.round(base * mul);
+  S.gold += pay; S.stat.earned += pay; S.stat.sold += R.n * 3; R.set.forEach(x => rivalTrack(x.k, Math.round(dval(x.k, x.g) * R.n * mul))); S.rep = Math.min(100, S.rep + s.sc / 25 * repDim());
+  C.n++; C.best = Math.max(C.best, s.sc); S.stat.course = (S.stat.course || 0) + 1; if (s.sc >= 90) S.stat.course90 = (S.stat.course90 || 0) + 1; dirty = true;
+  const stars = s.sc >= 90 ? '★★★' : s.sc >= 70 ? '★★' : s.sc >= 45 ? '★' : '';
+  const html = `<div class="tth">🍽 ${R.who}のコース（${R.n}名）</div><div style="display:flex;justify-content:center;gap:${U * 2}px">${R.set.map((x, i) => `<div style="text-align:center">${dishIcHTML(x.k, U * 12, x.g)}<div style="font-size:.8em">${CRS_ROLE[CRS_SLOTS[i]].n}</div></div>`).join('')}</div>
+    <div class="ttx">食べ合わせ <b style="font-size:1.3em">${s.sc}点</b> ${stars}<br>${s.parts.map(p => `${p[0]} ${p[1]}/${p[2]}`).join('<br>')}<br><br>お代 <b>${fmt(pay)}G</b>（料理の値打ち×${mul.toFixed(2)}）</div>`;
+  if (simulating) rep_.course = (rep_.course || '') + `${R.who}のコース ${s.sc}点 +${fmt(pay)}G。`; else popStory(html);
+}
+function openCourse(sel) {
+  if (!crsOn()) return; tut('m_course'); const C = crsSt();
+  let html = `<div class="p">予約のお客さんに、<b>前菜・主菜・デザート</b>の3品を人数ぶん用意する。時間になると来店して食べ、<b>食べ合わせの点数</b>で支払いが最大2.5倍になる（これまでの最高 ${C.best}点・${C.n}組）。</div>`;
+  if (!C.list.length) html += '<div class="p">いまの予約はない。毎朝6時に、その日の夜の予約が入る（0〜2組）。</div>';
+  for (const R of C.list) { const s = crsScore(R), t = R.at % 1440;
+    html += `<div class="h">${R.who}　${R.n}名　${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}　好み：${CRS_LIKE[R.like].n}</div><div style="display:flex;gap:${U}px">${R.set.map((x, i) => `<div class="btn ${x ? 'grn' : ''}" data-cs="${R.id}:${i}" style="flex:1;padding:${U}px 2px;text-align:center">${x ? dishIcHTML(x.k, U * 10, x.g) + `<div style="font-size:.75em;line-height:1.2">${dishInfo(x.k).name}</div>` : `<div style="font-size:.85em">＋${CRS_ROLE[CRS_SLOTS[i]].n}</div>`}</div>`).join('')}</div>`;
+    html += s ? `<div class="p">食べ合わせ <b>${s.sc}点</b>（${s.parts.map(p => `${p[0]}${p[1]}/${p[2]}`).join('・')}）→ お代 約${fmt(Math.round(R.set.reduce((a, x) => a + dval(x.k, x.g), 0) * R.n * (1 + 1.5 * s.sc / 100)))}G</div>` : `<div class="p" style="color:var(--sub)">3品そろえると点数が出る。用意した料理は倉庫から取り分ける（外すと戻る）。</div>`; }
+  if (sel) { const [rid, i] = sel.split(':').map(Number), R = C.list.find(x => x.id === rid); if (R) { const role = CRS_SLOTS[i];
+    const L = allDishes().filter(x => x.n >= R.n || (R.set[i] && R.set[i].k === x.k)).map(x => ({...x, fit:crsRoleFit(x.k, role), like:recOfKey(x.k) && CRS_LIKE[R.like].f(recOfKey(x.k))})).sort((a, b) => b.fit - a.fit || b.like - a.like || dval(b.k, b.g) - dval(a.k, a.g)).slice(0, 40);
+    html = `<div class="p"><b>${R.who}</b>の<b>${CRS_ROLE[role].n}</b>を選ぶ（${R.n}皿いる）。上ほど${CRS_ROLE[role].n}に向いている。${R.set[i] ? '<div class="btn" data-cx="1" style="margin-top:4px">外す</div>' : ''}</div>` +
+      (L.map(x => `<div class="row">${dishIcHTML(x.k, U * 10, x.g)}<div class="t"><b>${x.g ? '金色の' : ''}${dishInfo(x.k).name}</b><span>×${x.n}　${x.fit >= 25 ? `◎${CRS_ROLE[role].n}向き` : x.fit >= 15 ? `○` : '△'}${x.like ? '　💗' + CRS_LIKE[R.like].n : ''}${inSeasonDish(x.k) ? '　旬' : ''}　${fmt(dval(x.k, x.g))}G</span></div><div class="btn grn" data-cp="${x.k}|${x.g ? 1 : 0}">選ぶ</div></div>`).join('') || `<div class="p">${R.n}皿以上ある料理がない。かまどで作ろう。</div>`) + '<div class="btn" data-cb="1" style="margin-top:4px">もどる</div>';
+    modal('予約帳', html, 'course');
+    bind('[data-cb]', () => openCourse()); bind('[data-cx]', () => { const o = R.set[i]; if (o) add(o.g ? S.dishG : S.dish, o.k, R.n); R.set[i] = null; dirty = true; openCourse(); });
+    bind('[data-cp]', d => { const [k, g] = d.cp.split('|'), gg = g === '1', o = R.set[i]; if (haveDish(k, gg) + (o && o.k === k && o.g === gg ? R.n : 0) < R.n) return; if (o) add(o.g ? S.dishG : S.dish, o.k, R.n); takeDish(k, gg, R.n); R.set[i] = {k, g:gg}; sfx('pop'); dirty = true; openCourse(); }); return; } }
+  modal('予約帳', html, 'course'); bind('[data-cs]', d => openCourse(d.cs));
+}
 // ===== v0.40: 魔物牧場・使い魔・薬草と調合
 const POTD = {}; (D.pot || []).forEach(([id, rc, d]) => POTD[id] = {rc, d});
 const POT_IDS = Object.keys(POTD);
@@ -7521,6 +7592,7 @@ function todoList() {
   const out = [], add_ = (i, t, go_) => out.push({i, t, go:go_});
   const ripe = PIDX().filter(j => ready(S.plots[j])).length; if (ripe) add_('🌾', `農場の作物が${ripe}つ実っている`, 'farm');
   const empty = PIDX().filter(j => !S.plots[j].seed).length; if (empty && unl('quality')) add_('🌱', `農場の空いた区画が${empty}つ`, 'farm');
+  if (crsOn()) { const w = crsSt().list.filter(R => R.set.some(x => !x)); if (w.length) add_('📖', `コースの予約${w.length}組：前菜・主菜・デザートをそろえる（店内の「📖予約」）`, 'interior'); }
   if (unl('stele') && typeof stSt === 'function') { const T = stSt(), n = STELE_T.filter(x => T.got[x]).length; if (n < 5) add_('🪨', `石碑の紋 ${n}/5（まだ：${STELE_T.filter(x => !T.got[x]).map(x => (TOWNC[x] || {}).n || x).join('・')}の広場）`, 'expmap'); }
   if (S.fac.cellar && S.cellar && S.cellar.slots) { const n = S.cellar.slots.filter(x => x && celDone(x)).length; if (n) add_('🍷', `地下貯蔵庫の熟成が${n}台できあがった`, 'cellar'); }
   if (unl('orders') && S.orders) { const n = S.orders.filter(o => haveDish('r' + o.ri, false) + haveDish('r' + o.ri, true) >= o.n).length; if (n) add_('📜', `届けられる依頼が${n}件（掲示板）`, 'outside');
